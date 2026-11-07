@@ -1,0 +1,1027 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hadoop: the big picture — how every piece works together</title>
+<style>
+:root{
+  --bg:#0E1524; --bg2:#141E33; --panel:#18233B; --line:#2C3B5C; --text:#E8EDF6; --muted:#9AA8C2;
+  --hdfs:#F2A93B; --yarn:#4FA3F7; --mr:#7BD389; --hive:#E86FB0; --hbase:#F26B5B; --kafka:#B392F0;
+  --zk:#5FD3C8; --ingest:#F5D547; --spark:#FF8A3D; --client:#9AA7BD; --azure:#3BA3FF; --red:#FF5A5A;
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif}
+#app{display:flex;flex-direction:column;height:100vh;min-height:640px}
+header{display:flex;align-items:center;gap:14px;padding:10px 16px;border-bottom:1px solid var(--line);background:var(--bg2);flex-wrap:wrap}
+header h1{font-size:18px;margin:0;font-weight:700;letter-spacing:.2px}
+header h1 span{color:var(--muted);font-weight:500;font-size:14px;margin-left:8px}
+.seg{display:flex;border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.seg button{background:transparent;color:var(--muted);border:0;padding:7px 12px;font-size:13px;cursor:pointer}
+.seg button.on{background:#25365A;color:var(--text)}
+.spacer{flex:1}
+.btn{background:#22314F;color:var(--text);border:1px solid var(--line);border-radius:9px;padding:7px 12px;font-size:13px;cursor:pointer}
+.btn:hover{background:#2A3C61}
+#main{flex:1;display:flex;min-height:0}
+#stageWrap{flex:1;display:flex;flex-direction:column;min-width:0;background:radial-gradient(ellipse at 50% 40%,#132038 0%,#0E1524 70%)}
+#stageArea{flex:1;position:relative;min-height:0}
+#stage{position:absolute;inset:0;width:100%;height:100%;display:block}
+#panel{width:340px;border-left:1px solid var(--line);background:var(--panel);overflow:auto;padding:16px 18px}
+#filters{display:flex;gap:6px;padding:7px 16px;border-top:1px solid var(--line);background:var(--bg2);flex-wrap:nowrap;overflow-x:auto;align-items:center}
+#filters .chipf{flex:none}
+#panel.hide{display:none}
+#filters .lbl{color:var(--muted);font-size:12px;margin-right:4px}
+.chipf{border:1px solid var(--line);background:#1B2742;color:var(--text);border-radius:999px;padding:5px 11px;font-size:12px;cursor:pointer;display:flex;gap:6px;align-items:center}
+.chipf i{width:10px;height:10px;border-radius:50%;display:inline-block}
+.chipf.on{outline:2px solid #fff3}
+footer{display:flex;align-items:center;gap:10px;padding:9px 16px;border-top:1px solid var(--line);background:#101A2E;flex-wrap:wrap}
+footer .pbtn{width:40px;height:36px;border-radius:9px;border:1px solid var(--line);background:#22314F;color:#fff;font-size:16px;cursor:pointer}
+footer .pbtn.big{width:52px;background:#2F6BD8;border-color:#2F6BD8}
+#timeline{flex:1;display:flex;gap:3px;min-width:260px;height:36px;align-items:stretch}
+#timeline .ts{flex:1;background:#1E2A45;border-radius:5px;cursor:pointer;position:relative;overflow:hidden;border:1px solid #2A3A5E}
+#timeline .ts.done{background:#2C4A7C}
+#timeline .ts.cur{background:#3B6FD0;border-color:#8FB4FF}
+#timeline .ts.cloud{border-bottom:3px solid var(--azure)}
+#timeline .ts:hover::after{content:attr(data-t);position:absolute;left:4px;top:9px;font-size:11px;color:#fff;white-space:nowrap}
+footer label{font-size:12px;color:var(--muted);display:flex;gap:6px;align-items:center}
+footer select{background:#1B2742;color:var(--text);border:1px solid var(--line);border-radius:7px;padding:5px}
+#sceneTag{position:absolute;left:16px;top:12px;background:#0B1220CC;border:1px solid var(--line);border-radius:10px;padding:8px 12px;max-width:60%}
+#sceneTag .ch{font-size:11px;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted)}
+#sceneTag .tt{font-size:17px;font-weight:700;margin-top:2px}
+#caption{flex:none;margin:0 14px 10px;background:#070C17;border:1px solid #33456B;border-radius:12px;padding:12px 18px;font-size:18px;line-height:1.45;text-align:center;min-height:82px}
+#caption .hint{display:block;font-size:12px;color:var(--muted);margin-top:6px}
+#cards{position:absolute;right:14px;top:12px;display:flex;flex-direction:column;gap:8px;align-items:flex-end;pointer-events:none}
+.card{background:#0B1220F0;border:1px solid #3A4E78;border-radius:10px;padding:10px 13px;font-size:13px;min-width:220px;max-width:330px;box-shadow:0 6px 20px #0007}
+.card h4{margin:0 0 6px;font-size:12px;letter-spacing:1.2px;text-transform:uppercase;color:var(--muted)}
+.card .big{font-size:24px;font-weight:800}
+.card table{border-collapse:collapse;width:100%}
+.card td{padding:2px 4px;font-size:13px}
+.meter{height:10px;background:#1F2B46;border-radius:6px;overflow:hidden;margin-top:6px}
+.meter b{display:block;height:100%;background:var(--ingest);width:0}
+.dag{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.dag span{padding:4px 8px;border-radius:7px;border:1px solid #4A5D85;font-size:12px}
+.dag span.run{background:#2F6BD8;border-color:#8FB4FF}
+.dag span.ok{background:#215C3A;border-color:#7BD389}
+#legend{position:absolute;left:16px;bottom:96px;background:#0B1220F2;border:1px solid var(--line);border-radius:12px;padding:12px 14px;font-size:13px;display:none;max-width:420px}
+#legend.show{display:block}
+#legend .row{display:flex;gap:10px;align-items:center;margin:6px 0}
+#legend svg{flex:none}
+/* panel */
+#panel h2{font-size:20px;margin:4px 0 4px}
+#panel .kind{display:inline-block;font-size:11px;letter-spacing:1px;text-transform:uppercase;padding:3px 8px;border-radius:999px;background:#25365A;color:#CFE0FF;margin-bottom:8px}
+#panel .kind.machine{background:#39465F;color:#E6ECF7}
+#panel .kind.daemon{background:#1E4D3A;color:#B8F2CF}
+#panel .kind.task{background:#4A3B12;color:#FFE7A3}
+#panel .kind.data{background:#4D2F12;color:#FFD3A1}
+#panel .kind.net{background:#2A2F45;color:#C9D2EA}
+#panel .kind.svc{background:#123A63;color:#BFE0FF}
+#panel p{font-size:14px;line-height:1.5;color:#D8E0EE;margin:8px 0}
+#panel dl{margin:10px 0;font-size:13.5px}
+#panel dt{color:var(--muted);font-size:11px;letter-spacing:1.2px;text-transform:uppercase;margin-top:10px}
+#panel dd{margin:3px 0 0;line-height:1.45}
+#panel ul{margin:4px 0 0 18px;padding:0}
+#panel li{margin:3px 0;font-size:13.5px;line-height:1.4}
+#panel .analogy{background:#1D2C4B;border-left:4px solid #4FA3F7;border-radius:8px;padding:9px 11px;font-size:13.5px;margin:12px 0}
+#panel .goto{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
+#panel .goto button{background:#22314F;border:1px solid var(--line);color:var(--text);border-radius:8px;padding:5px 9px;font-size:12px;cursor:pointer}
+#panel .close{float:right}
+#panel .scenelist{list-style:none;margin:8px 0 0;padding:0}
+#panel .scenelist li{padding:7px 9px;border-radius:8px;cursor:pointer;font-size:13.5px;display:flex;gap:8px}
+#panel .scenelist li:hover{background:#22314F}
+#panel .scenelist li.cur{background:#2B4373}
+#panel .scenelist li b{color:var(--muted);font-weight:600;width:22px;flex:none}
+#panel .transcript{font-size:13px;color:#C9D3E6;border-top:1px solid var(--line);margin-top:12px;padding-top:8px}
+#panel .transcript div{margin:6px 0;line-height:1.4}
+#panel .transcript div.now{color:#fff}
+/* svg */
+svg text{font-family:system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif}
+.rack{fill:#121C30;stroke:#26375A;stroke-width:1.5}
+.racktitle{fill:#7F8EAD;font-size:15px;letter-spacing:1.6px;font-weight:700;text-transform:uppercase}
+.mach rect.body{fill:#1A2540;stroke:#3A4D75;stroke-width:1.6}
+.mach text.t{fill:#F2F5FB;font-size:17px;font-weight:700}
+.mach text.s{fill:#8E9CB8;font-size:13px}
+.mach .ico{fill:#55688F}
+.mach.dead rect.body{stroke:var(--red);fill:#2A1620}
+.mach.dead text.t{fill:#FF9C9C}
+.mach.off{opacity:.08}
+.proc rect{rx:6;stroke-width:1.3}
+.proc text{font-size:14px;font-weight:600}
+.proc.dead rect{fill:#2A2F3A!important;stroke:#555!important}
+.proc.dead text{fill:#777!important;text-decoration:line-through}
+.proc.glow rect{filter:url(#glow)}
+.netl{stroke:#2E4066;stroke-width:2;fill:none}
+.netcore{fill:#22304F;stroke:#4A6190}
+.nettext{fill:#8FA0C2;font-size:13px;font-weight:600}
+.slot{fill:none;stroke:#2C3B5C;stroke-dasharray:4 3}
+.cont rect{stroke-width:1.6;stroke-dasharray:5 3}
+.cont text{font-size:13px;font-weight:700}
+.blk rect{rx:4}
+.blk text{font-size:12.5px;font-weight:800}
+.lbl2{fill:#7887A6;font-size:12.5px}
+.dim{opacity:.22;transition:opacity .35s}
+.focusable{transition:opacity .35s}
+.pkt text{font-size:15px;font-weight:700;paint-order:stroke;stroke:#0E1524;stroke-width:4px}
+.clickable{cursor:pointer}
+.clickable:hover rect.body{stroke:#8FB4FF}
+.proc.clickable:hover rect{stroke:#fff}
+.xmark{stroke:var(--red);stroke-width:5;stroke-linecap:round}
+.frame{fill:none;stroke:#3BA3FF;stroke-width:2;stroke-dasharray:8 6}
+.frametitle{fill:#8CC6FF;font-size:15px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase}
+.store rect.body{fill:#13304F;stroke:#3BA3FF}
+.glow{filter:url(#glow)}
+.off{opacity:.06!important}
+kbd{background:#22314F;border:1px solid var(--line);border-radius:4px;padding:0 5px;font-size:11px}
+@media (max-width:1100px){#panel{width:300px}}
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <h1>Hadoop — the big picture <span>which programs run on which machines, and how they work together</span></h1>
+    <div class="spacer"></div>
+    <div class="seg" id="modeSeg"><button data-m="watch" class="on">▶ Watch the story</button><button data-m="explore">🔍 Explore freely</button></div>
+    <div class="seg" id="worldSeg"><button data-w="onprem" class="on">On-premises cluster</button><button data-w="cloud">Azure HDInsight</button></div>
+    <button class="btn" id="legendBtn">Legend</button>
+    <button class="btn" id="panelBtn">Hide panel</button>
+  </header>
+  <div id="main">
+    <div id="stageWrap">
+      <div id="stageArea">
+      <svg id="stage" viewBox="0 0 1800 1000" preserveAspectRatio="xMidYMid meet" aria-label="Map of a Hadoop cluster: racks of machines and the programs running on them"></svg>
+      <div id="sceneTag"><div class="ch" id="chTxt"></div><div class="tt" id="ttTxt"></div></div>
+      <div id="cards"></div>
+      <div id="legend"></div>
+      </div>
+      <div id="caption"></div>
+    </div>
+    <aside id="panel"></aside>
+  </div>
+  <div id="filters"><span class="lbl" style="flex:none;white-space:nowrap">Highlight a system:</span></div>
+  <footer>
+    <button class="pbtn" id="prevBtn" title="Previous scene">⏮</button>
+    <button class="pbtn big" id="playBtn" title="Play / pause (space)">⏸</button>
+    <button class="pbtn" id="nextBtn" title="Next scene">⏭</button>
+    <div id="timeline"></div>
+    <label>Speed <select id="speedSel"><option value="0.6">0.6×</option><option value="1" selected>1×</option><option value="1.5">1.5×</option><option value="2">2×</option></select></label>
+    <label title="Waits for you after every sentence: press → or click the caption to continue"><input type="checkbox" id="stepChk"> Lecture mode (pause after each sentence)</label>
+  </footer>
+</div>
+
+<script>
+"use strict";
+/* =====================================================================
+   1. SYSTEMS, COLOURS
+   ===================================================================== */
+const SYS = {
+  hdfs:{name:"HDFS (storage)", c:"#F2A93B"},
+  yarn:{name:"YARN (resources)", c:"#4FA3F7"},
+  mr:{name:"MapReduce / Tez tasks", c:"#7BD389"},
+  hive:{name:"Hive (SQL)", c:"#E86FB0"},
+  hbase:{name:"HBase (NoSQL)", c:"#F26B5B"},
+  kafka:{name:"Kafka (streams)", c:"#B392F0"},
+  zk:{name:"ZooKeeper (coordination)", c:"#5FD3C8"},
+  spark:{name:"Spark", c:"#FF8A3D"},
+  ingest:{name:"Sqoop · Flume · Oozie", c:"#F5D547"},
+  client:{name:"Clients & sources", c:"#9AA7BD"},
+  azure:{name:"Azure services", c:"#3BA3FF"}
+};
+const NS = "http://www.w3.org/2000/svg";
+const svg = document.getElementById("stage");
+function el(tag, attrs, parent){ const e=document.createElementNS(NS,tag); for(const k in (attrs||{})) e.setAttribute(k,attrs[k]); if(parent) parent.appendChild(e); return e; }
+function txt(parent,x,y,s,cls,extra){ const t=el("text",Object.assign({x,y,class:cls||""},extra||{}),parent); t.textContent=s; return t; }
+function shade(hex,a){ return hex + Math.round(a*255).toString(16).padStart(2,"0"); }
+
+/* =====================================================================
+   2. INFORMATION FOR EVERY COMPONENT (deep dives)
+   kind: machine | daemon | task | data | net | svc
+   ===================================================================== */
+const INFO = {
+ laptop:{title:"Your laptop", kind:"machine", sys:"client", what:"Your own computer. It is NOT part of the cluster. It only sends requests over the network: SQL through Beeline or Power BI, or file commands with the hdfs client.", runs:"Beeline (Hive client), the hdfs command-line client, Power BI.", talks:["HiveServer2 on the utility node (SQL)","NameNode (asks where blocks are)","DataNodes (sends and receives the actual bytes)"], fails:"Nothing in the cluster cares. Your query is simply cancelled.", analogy:"A customer standing at the library's front desk: asks questions, never walks into the stacks.", scenes:["write","read","hive"]},
+ web:{title:"Web servers", kind:"machine", sys:"client", what:"The company's ordinary web servers. They are outside the Hadoop cluster and write a log line for every click and error.", runs:"The website; it produces log events.", talks:["The Flume agent on the edge node (sends log events)"], fails:"Logs stop arriving; the cluster keeps running.", analogy:"Shops that write a receipt for every sale.", scenes:["ingest"]},
+ apps:{title:"App servers", kind:"machine", sys:"client", what:"Application servers (e.g. the mobile app's back end). They publish events to Kafka and read/write single rows in HBase.", runs:"A Kafka producer library, an HBase client library.", talks:["Kafka brokers","ZooKeeper (to find hbase:meta)","HBase RegionServers"], fails:"No new events or lookups; the cluster is unaffected.", analogy:"The cashiers who both shout updates into a megaphone (Kafka) and look up one customer's card (HBase).", scenes:["kafka","hbase"]},
+ mysqlsrv:{title:"MySQL server (orders database)", kind:"machine", sys:"client", what:"The company's normal relational database for day-to-day orders. It lives outside Hadoop. Sqoop copies its tables into HDFS for analysis.", runs:"MySQL.", talks:["Sqoop's map tasks (each reads one slice of the table over JDBC)"], fails:"The import fails and Oozie raises an alert.", analogy:"The shop's till system. Analysts get a photocopy of it, not the till itself.", scenes:["ingest"]},
+ master:{title:"Master node", kind:"machine", sys:"hdfs", what:"A server dedicated to 'brain' programs: they keep metadata and make decisions. Master nodes hold NO user data blocks. Small clusters have 3 masters so every critical service has a backup and ZooKeeper has a majority.", runs:"See the coloured programs inside: NameNode (active or standby), ZKFC, JournalNode, ZooKeeper, ResourceManager, HMaster.", talks:["Every worker (heartbeats come in)","Each other (ZooKeeper, JournalNodes)"], fails:"Its services fail over to their standby on another master (see the scene 'When a master dies').", analogy:"Head office: the catalogue and the managers, but no warehouse shelves.", scenes:["boot","failover"]},
+ utility:{title:"Utility node", kind:"machine", sys:"hive", what:"A server for shared services that are not core HDFS/YARN masters: Hive's front desk (HiveServer2), the Hive Metastore service and its database, and the Oozie scheduler. Many companies put these on a master node instead; the idea is the same.", runs:"HiveServer2, Hive Metastore service, MySQL (metastore database), Oozie server.", talks:["Clients (SQL in, results out)","ResourceManager (submits Tez jobs)","Workers (Tez tasks report back)"], fails:"SQL access stops until it restarts or a second HiveServer2 takes over. No data is lost: it never stored the data.", analogy:"The library's information desk and card catalogue.", scenes:["hive","oozie"]},
+ edge:{title:"Edge node (gateway node)", kind:"machine", sys:"client", what:"The door into the cluster for people and tools. Users SSH in here and run client programs, so nobody runs ad-hoc jobs on the masters. It stores no HDFS blocks and runs no YARN containers.", runs:"hdfs / yarn / beeline clients, spark-submit, the Sqoop client, a Flume agent (collector).", talks:["ResourceManager (job submission)","NameNode and DataNodes (as an HDFS client)","MySQL and web servers (ingestion)"], fails:"Users lose their entry point; running jobs continue on the workers.", analogy:"The staff entrance with the tool room.", scenes:["mr","ingest","kafka"]},
+ worker:{title:"Worker node", kind:"machine", sys:"yarn", what:"The workhorse. Lots of disks (for HDFS blocks) and lots of CPU and memory (for YARN containers). Every worker runs the same daemons: a DataNode, a NodeManager and an HBase RegionServer. You scale the cluster by adding workers.", runs:"Always: DataNode, NodeManager, RegionServer. Temporarily: containers with map/reduce/Tez/Spark/Sqoop tasks.", talks:["NameNode (heartbeat every 3 s)","ResourceManager (heartbeat about every 1 s)","Other workers (replication pipelines, shuffle)"], fails:"Its blocks are re-copied elsewhere after ~10.5 min; its running tasks are re-run elsewhere by each job's ApplicationMaster.", analogy:"A branch that both stores goods and has workbenches to process them.", scenes:["intro","write","fail","mr"]},
+ broker:{title:"Kafka broker machine", kind:"machine", sys:"kafka", what:"A server running a Kafka broker. Kafka usually gets its own machines because it does constant disk and network I/O. Each broker stores some partitions of each topic on its disks.", runs:"Kafka broker (a Java program).", talks:["Producers (append events)","Other brokers (followers copy from leaders)","Consumers (read events)"], fails:"For partitions it led, a follower on another broker becomes leader; producers and consumers switch over.", analogy:"A post office sorting room that keeps a copy of every letter for a week.", scenes:["kafka"]},
+ tor:{title:"Top-of-rack (ToR) switch", kind:"net", sys:"client", what:"Every rack has a network switch at the top. Machines in the same rack talk through it directly. Traffic to another rack must go up to the core switch and down again, which is why HDFS and YARN prefer 'same node, then same rack'.", runs:"—", talks:["Every machine in its rack","The core switch"], fails:"The whole rack becomes unreachable, which is exactly why HDFS keeps copies on 2 racks.", analogy:"The corridor of one building.", scenes:["intro","write"]},
+ core:{title:"Core switch", kind:"net", sys:"client", what:"Connects all racks together (and to the outside world through a firewall). Cross-rack bandwidth is the scarcest resource in a classic cluster.", runs:"—", talks:["All top-of-rack switches"], fails:"Real clusters have redundant core switches.", analogy:"The main road between buildings.", scenes:["intro","mr"]},
+
+ namenode:{title:"NameNode", kind:"daemon", sys:"hdfs", what:"The HDFS master program. It keeps the whole namespace (folders, files, permissions) and the block map (which blocks make up each file and which DataNodes hold them) in memory. It never stores or transfers file data: clients get addresses from it and talk to DataNodes directly.", runs:"Master 1 (active) and Master 2 (standby).", talks:["Clients (metadata questions)","DataNodes (heartbeats every 3 s, block reports)","JournalNodes (writes every change to the edit log)","its ZKFC"], nums:["Default block size 128 MB","3 copies per block","Heartbeat 3 s · stale after 30 s · dead after 630 s"], fails:"With HA, the standby takes over in seconds (ZooKeeper + ZKFC). Without HA, the whole file system is unavailable until it restarts.", analogy:"The library catalogue: it knows where every page is, but never carries books.", scenes:["write","read","fail","failover"]},
+ zkfc:{title:"ZKFC (ZooKeeper Failover Controller)", kind:"daemon", sys:"hdfs", what:"A small program next to each NameNode. It health-checks its NameNode and holds a session with ZooKeeper. The ZKFC whose NameNode is active holds the 'active' lock. If the active NameNode dies, the other ZKFC grabs the lock and promotes its own NameNode. Fencing makes sure the old one can never write again: with the Quorum Journal Manager, the JournalNodes accept edits only from the NameNode with the newest 'epoch'.", runs:"Master 1 and Master 2 (one beside each NameNode).", talks:["Its local NameNode","ZooKeeper"], fails:"If a ZKFC dies, its lock is released, which triggers a failover.", analogy:"A bodyguard who holds the 'manager on duty' badge.", scenes:["boot","failover"]},
+ journalnode:{title:"JournalNode", kind:"daemon", sys:"hdfs", what:"Stores the NameNode's edit log (every create, rename, delete). The active NameNode writes each change to a majority of the JournalNodes; the standby keeps reading them so it is always up to date.", runs:"Masters 1, 2 and 3 (three JournalNodes, so the log survives one failure).", talks:["Active NameNode (writes)","Standby NameNode (reads)"], nums:["3 (or 5) JournalNodes; a write needs a majority"], fails:"With 3 JournalNodes, losing 1 is fine; losing 2 stops metadata changes.", analogy:"Three notebooks where every catalogue change is written down.", scenes:["failover"]},
+ zookeeper:{title:"ZooKeeper server", kind:"daemon", sys:"zk", what:"A small, very reliable coordination service. It stores tiny pieces of shared state (znodes): who is the active NameNode or ResourceManager, where HBase's meta table is, which servers are alive. Servers form an ensemble that elects a leader; every change needs a majority.", runs:"Masters 1, 2 and 3 (three servers form one ensemble).", talks:["ZKFCs","ResourceManagers","HBase (HMaster, RegionServers, clients)","HiveServer2 (service discovery)"], nums:["3 servers survive 1 failure; 5 survive 2","Ephemeral znodes vanish when their owner's session dies"], fails:"One server down: nothing visible. Majority down: failovers and HBase stop working.", analogy:"The referee everyone trusts to say who is captain.", scenes:["boot","hbase","failover"]},
+ resourcemanager:{title:"ResourceManager (YARN)", kind:"daemon", sys:"yarn", what:"The YARN master. Its Scheduler decides which application gets how much CPU and memory, on which node, using queues and capacity rules. Its ApplicationsManager accepts jobs and starts each job's ApplicationMaster. It never runs tasks itself.", runs:"Master 3 (active) and Master 2 (standby, via ZooKeeper).", talks:["Clients (job submission)","NodeManagers (heartbeats, about every 1 s)","ApplicationMasters (container requests)"], fails:"The standby takes over; with work-preserving recovery, running containers continue.", analogy:"Head office that allocates workbenches to projects.", scenes:["mr","hive","kafka","ingest"]},
+ hmaster:{title:"HMaster (HBase master)", kind:"daemon", sys:"hbase", what:"Assigns HBase regions to RegionServers, balances them, handles splits and table changes (create/alter). It is NOT in the read/write path: clients talk to RegionServers directly.", runs:"Master 3 (a standby HMaster usually runs on another master).", talks:["ZooKeeper","RegionServers"], fails:"Reads and writes continue; only region moves and table changes wait.", analogy:"The manager who decides which clerk owns which drawer of the filing cabinet.", scenes:["hbase"]},
+ hiveserver2:{title:"HiveServer2", kind:"daemon", sys:"hive", what:"Hive's front desk. A Java program that accepts SQL over JDBC/ODBC (from Beeline, Power BI, apps). Inside it, the compiler checks the query against the Metastore, the optimizer builds a plan (a DAG), and the plan is submitted to YARN as a Tez job. Only the small final result comes back through it.", runs:"The utility node here (on HDInsight: the head nodes).", talks:["Clients","Hive Metastore service","ResourceManager","Tez ApplicationMaster"], fails:"Queries fail until it restarts or another HiveServer2 instance (registered in ZooKeeper) takes over. Data is untouched.", analogy:"The librarian at the desk: reads your question, checks the catalogue, sends helpers to the shelves.", scenes:["hive","oozie"]},
+ hms:{title:"Hive Metastore service", kind:"daemon", sys:"hive", what:"A service that answers 'what does this table look like?': columns, types, partitions and the storage location of the files. Hive, Spark and other engines all ask it. It stores the answers in a relational database.", runs:"The utility node.", talks:["HiveServer2 (and Spark)","The metastore database"], fails:"New queries cannot be compiled. Files are untouched.", analogy:"The card catalogue clerk.", scenes:["hive"]},
+ metastoredb:{title:"Metastore database (MySQL)", kind:"daemon", sys:"hive", what:"An ordinary relational database holding Hive's table definitions. It holds the description of the data, never the data itself.", runs:"The utility node here. On Azure: an Azure SQL Database, kept outside the cluster.", talks:["Hive Metastore service"], fails:"If lost without a backup, the files remain but nobody knows their columns.", analogy:"The drawers of catalogue cards.", scenes:["hive","cloud1"]},
+ oozie:{title:"Oozie server", kind:"daemon", sys:"ingest", what:"A workflow scheduler. A coordinator starts a workflow on a schedule or when input data appears; the workflow is a DAG of actions (Sqoop, Hive, Spark…), each launched as its own YARN job. Oozie only waits, launches and records state; it never processes data. (Retired to the Apache Attic in 2025; Airflow and Azure Data Factory do this job today.)", runs:"The utility node.", talks:["ResourceManager","HiveServer2","Its own database"], fails:"Scheduled pipelines don't start; running YARN jobs finish normally.", analogy:"The alarm clock and to-do list for the night shift.", scenes:["oozie"]},
+ sqoopcli:{title:"Sqoop client", kind:"daemon", sys:"ingest", what:"A command-line tool (not a long-running service). 'sqoop import' reads MIN and MAX of the split column, cuts the range into slices (4 by default) and submits a map-only YARN job; each map task reads one slice from the database over JDBC and writes it to HDFS. (Retired 2021; Azure Data Factory and Spark JDBC use the same idea.)", runs:"The edge node.", talks:["MySQL","ResourceManager"], fails:"The import fails; rerun it.", analogy:"A removal company that sends 4 vans to 4 rooms at once.", scenes:["ingest"]},
+ flume:{title:"Flume agent", kind:"daemon", sys:"ingest", what:"A Java program with three parts: a Source receives events, a Channel buffers them (memory = fast, file = survives a crash), an HDFS Sink appends batches to an open file and rolls to a new file by time, size or event count. Tuned well (e.g. roll at ~128 MB), HDFS gets a few large files instead of millions of tiny ones; the defaults (30 s, 1 KB, 10 events) produce small files. Agents often run on the web servers themselves or on a collector node like this one. (Marked dormant in 2024; Kafka usually does this today.)", runs:"The edge node (as a collector).", talks:["Web servers (events in)","NameNode and DataNodes (as an HDFS client)"], fails:"With a file channel, buffered events survive a restart.", analogy:"A mail sack that is only taken to the post office when it's full.", scenes:["ingest"]},
+ clients:{title:"Client tools (hdfs, yarn, beeline)", kind:"daemon", sys:"client", what:"Command-line programs people run on the edge node to copy files, submit jobs and run SQL. They run only while you use them.", runs:"The edge node.", talks:["NameNode, DataNodes, ResourceManager, HiveServer2"], fails:"Only your command fails.", analogy:"The tools hanging at the staff entrance.", scenes:["mr"]},
+ sparksubmit:{title:"spark-submit", kind:"daemon", sys:"spark", what:"The command that launches a Spark application on YARN. In cluster mode the Spark driver runs inside the application's ApplicationMaster container on a worker, and executors run in more containers.", runs:"The edge node.", talks:["ResourceManager"], fails:"Only the launch fails.", analogy:"Pressing 'start' on a production line.", scenes:["kafka"]},
+ datanode:{title:"DataNode", kind:"daemon", sys:"hdfs", what:"Stores HDFS blocks as ordinary files on the worker's local disks and serves them to clients and tasks. It joins replication pipelines (store a packet, forward it), sends a heartbeat to the NameNodes every 3 seconds and regular block reports.", runs:"Every worker.", talks:["NameNodes (both, active and standby)","Clients and tasks (data)","Other DataNodes (pipelines, re-replication)"], nums:["Heartbeat every 3 s","Pipeline packets of 64 KB"], fails:"After ~10.5 minutes its blocks are re-copied from the surviving replicas.", analogy:"A shelf keeper who reports to the catalogue every 3 seconds.", scenes:["write","read","fail"]},
+ nodemanager:{title:"NodeManager (YARN)", kind:"daemon", sys:"yarn", what:"YARN's agent on each worker. It reports how much CPU and memory it has free, launches containers when the ResourceManager says so, watches their usage and kills any container that exceeds its limit.", runs:"Every worker.", talks:["ResourceManager (heartbeat about every 1 s)","ApplicationMasters (start this container)"], fails:"Its containers are lost; each job's ApplicationMaster re-runs those tasks elsewhere.", analogy:"The supervisor of one workshop.", scenes:["boot","mr"]},
+ regionserver:{title:"HBase RegionServer", kind:"daemon", sys:"hbase", what:"Serves HBase regions (contiguous ranges of row keys). A write goes first to the write-ahead log (WAL, stored in HDFS) and then into the MemStore in memory; full MemStores are flushed to HFiles in HDFS. It runs on the same machines as the DataNodes so its HFiles are usually local.", runs:"Every worker.", talks:["Clients (gets and puts)","ZooKeeper","DataNodes (WAL and HFiles)"], nums:["Typical lookups take milliseconds"], fails:"Its regions are reassigned by the HMaster; the WAL is replayed so no acknowledged write is lost.", analogy:"A clerk who owns a few drawers of a giant sorted filing cabinet.", scenes:["hbase"]},
+ kafkabroker:{title:"Kafka broker", kind:"daemon", sys:"kafka", what:"Stores topic partitions as append-only logs on disk. For each partition one broker is the leader (takes writes and serves reads) and others hold follower copies. Events are kept for a retention period (7 days by default), so consumers can re-read. Kafka 4.0+ manages its own metadata (KRaft) without ZooKeeper.", runs:"The Kafka rack's machines.", talks:["Producers","Other brokers","Consumers (e.g. Spark executors)"], nums:["Order guaranteed within a partition","Default retention 7 days"], fails:"A follower becomes leader for its partitions.", analogy:"A sorting office that keeps every letter for a week, in order.", scenes:["kafka"]},
+ beeline:{title:"Beeline", kind:"daemon", sys:"hive", what:"Hive's command-line SQL client. It connects to HiveServer2 over JDBC, sends your query and prints the result.", runs:"Your laptop (or the edge node).", talks:["HiveServer2"], fails:"Only your session ends.", analogy:"The slip of paper you hand to the librarian.", scenes:["hive"]},
+ hdfscli:{title:"hdfs client", kind:"daemon", sys:"hdfs", what:"The HDFS client ('hdfs dfs -put', '-get', '-ls'). It asks the NameNode for addresses, then streams data directly to and from DataNodes.", runs:"Your laptop or the edge node.", talks:["NameNode","DataNodes"], fails:"Only your command fails.", analogy:"You, carrying boxes after asking the catalogue where they go.", scenes:["write","read"]},
+ powerbi:{title:"Power BI", kind:"daemon", sys:"client", what:"A BI tool. It connects to HiveServer2 over ODBC/JDBC and sends SQL like any other client.", runs:"Your laptop.", talks:["HiveServer2"], fails:"Only the dashboard fails to refresh.", analogy:"A customer who always asks the same questions every morning.", scenes:["hive"]},
+ webapp:{title:"Web application", kind:"daemon", sys:"client", what:"The website itself; it writes small log events (about 1 KB each).", runs:"Web servers.", talks:["Flume agent"], fails:"—", analogy:"The till printing receipts.", scenes:["ingest"]},
+ producer:{title:"Kafka producer", kind:"daemon", sys:"kafka", what:"Library code inside the app that sends events to Kafka. The event's key (e.g. caller ID) is hashed to choose the partition, so one caller's events always land in the same partition, in order.", runs:"App servers.", talks:["Partition leaders on the brokers"], fails:"Events are retried or buffered by the app.", analogy:"Someone posting letters into the correct sorting slot.", scenes:["kafka"]},
+ hbclient:{title:"HBase client", kind:"daemon", sys:"hbase", what:"Library code inside the app. It asks ZooKeeper where the hbase:meta table is, reads meta to find which RegionServer owns a row, caches that, and then talks to that RegionServer directly.", runs:"App servers.", talks:["ZooKeeper","RegionServers"], fails:"—", analogy:"Looking up which clerk owns surname 'S' once, then going straight to them.", scenes:["hbase"]},
+ ordersdb:{title:"MySQL (orders)", kind:"daemon", sys:"client", what:"The relational database engine holding the orders table that Sqoop imports.", runs:"MySQL server.", talks:["Sqoop map tasks"], fails:"Import fails.", analogy:"The till system.", scenes:["ingest"]},
+
+ am:{title:"ApplicationMaster (a container)", kind:"task", sys:"yarn", what:"Every YARN application (one MapReduce job, one Tez query, one Spark app) gets its own coordinator, the ApplicationMaster. YARN starts it in a container on some worker. It asks the ResourceManager for more containers (preferably on nodes that hold the data), tells NodeManagers to start them, tracks progress and re-runs failed tasks. It disappears when the job ends.", runs:"A container on any worker (chosen by the ResourceManager).", talks:["ResourceManager","NodeManagers","Its own tasks"], fails:"YARN restarts the ApplicationMaster (2 attempts by default).", analogy:"The project lead for one job, hired for the job's duration.", scenes:["mr","hive"]},
+ maptask:{title:"Map task (in a container)", kind:"task", sys:"mr", what:"Runs your map() function on one input split, normally one HDFS block, ideally on a worker that stores that block, so it reads from local disk. Outputs (key, value) pairs.", runs:"A YARN container on a worker.", talks:["Local DataNode (reads its block)","Reducers (shuffle)"], fails:"The ApplicationMaster re-runs it elsewhere from another replica of the block.", analogy:"A helper counting the shelf right next to them.", scenes:["mr"]},
+ reducetask:{title:"Reduce task (in a container)", kind:"task", sys:"mr", what:"Fetches its keys' values from every map task (the shuffle), sorts and groups them, runs your reduce() function and writes one output file (part-r-0000N) to HDFS.", runs:"A YARN container on a worker.", talks:["Every map task (shuffle)","DataNodes (writes output)"], fails:"Re-run elsewhere.", analogy:"The helper who adds up everyone's tallies for one city.", scenes:["mr"]},
+ teztask:{title:"Tez task (in a container)", kind:"task", sys:"mr", what:"Hive turns SQL into a Tez DAG. Tez tasks run in YARN containers just like map and reduce tasks, but can pass data along a whole chain of steps without writing to HDFS in between.", runs:"YARN containers on workers.", talks:["Local DataNodes","Other Tez tasks","Tez ApplicationMaster"], fails:"Re-run by the Tez ApplicationMaster.", analogy:"Helpers on a smarter assembly line.", scenes:["hive","oozie","cloud3"]},
+ sparkexec:{title:"Spark executor (in a container)", kind:"task", sys:"spark", what:"A long-lived worker process of one Spark application. It keeps data in memory between steps, which is why Spark is fast for repeated passes and streaming. Here executors read Kafka partitions.", runs:"YARN containers on workers.", talks:["Spark driver","Kafka brokers","DataNodes"], fails:"The driver asks YARN for a replacement executor.", analogy:"A helper who keeps their notes on the desk instead of filing them after every step.", scenes:["kafka"]},
+ sparkdriver:{title:"Spark driver (in the AM container)", kind:"task", sys:"spark", what:"The 'brain' of one Spark application. In YARN cluster mode it runs inside the ApplicationMaster container. It plans the work and hands tasks to executors.", runs:"A YARN container on a worker.", talks:["ResourceManager","Executors"], fails:"The application restarts (with checkpoints for streaming).", analogy:"The foreman of one production line.", scenes:["kafka"]},
+ sqoopmap:{title:"Sqoop map task (in a container)", kind:"task", sys:"ingest", what:"One slice of a Sqoop import: runs SELECT … WHERE id in its range against MySQL and writes the rows to HDFS as part-m-0000N. There are no reducers.", runs:"A YARN container on a worker.", talks:["MySQL","Local DataNode"], fails:"Re-run.", analogy:"One of the 4 removal vans.", scenes:["ingest"]},
+ block:{title:"HDFS block", kind:"data", sys:"hdfs", what:"A piece of a file, at most 128 MB, stored as an ordinary file on a DataNode's disk. Each block has 3 copies: by default one on the writer's node (or a random node if the writer is outside the cluster) and two on different nodes in another rack. calls_2026.csv (515 MB) is 5 blocks: four of 128 MB and one of 3 MB.", runs:"Disks of worker nodes.", talks:["—"], fails:"If a copy is lost, the NameNode schedules a new copy from a surviving one.", analogy:"One chapter of a book, photocopied 3 times and kept in 2 buildings.", scenes:["write","fail"]},
+
+ adf:{title:"Azure Data Factory", kind:"svc", sys:"azure", what:"Azure's managed orchestration service, the cloud successor to Oozie-style scheduling. A schedule trigger starts a pipeline; it can create an HDInsight cluster on demand, run Hive/MapReduce activities, and let the cluster be deleted after an idle time (timeToLive). Note: an on-demand HDInsight cluster from ADF uses Blob storage, so results are copied into ADLS Gen2 with a Copy activity, or ADF runs activities on a cluster you created on ADLS Gen2.", runs:"Managed by Azure: no machine for you to see.", talks:["HDInsight (create, submit, delete)"], fails:"Pipeline runs fail and are retried or alerted.", analogy:"A night manager with an alarm clock and a phone.", scenes:["cloud2","cloud4"]},
+ gateway:{title:"HDInsight gateway node", kind:"machine", sys:"azure", what:"Managed by Azure. All public HTTPS access (Ambari, Hive JDBC, REST) goes through clustername.azurehdinsight.net to the gateway nodes, which authenticate and forward requests into the cluster.", runs:"HTTPS gateway (managed).", talks:["Clients","Head nodes"], fails:"There are two; Azure replaces failed ones.", analogy:"The security desk at the building entrance.", scenes:["cloud1","cloud3"]},
+ headnode:{title:"HDInsight head node", kind:"machine", sys:"azure", what:"Two head nodes run the master services. HiveServer2 runs on both. Ambari server (and a few services like the Job History Server) runs only on the head node currently designated active; a failover controller starts it on the other one if needed. The YARN ResourceManagers and HDFS NameNodes hold their own ZooKeeper elections, so their active copy can be on either head node. They are ordinary Azure virtual machines that Azure creates for you.", runs:"HiveServer2 (both), ResourceManager and NameNode (active on one, standby on the other), Ambari server (active head node only).", talks:["Gateway","ZooKeeper nodes","Worker nodes","Azure SQL (metastore)","Azure Storage"], fails:"The services move to, or are already running on, the other head node automatically.", analogy:"Head office, rented by the hour.", scenes:["cloud1","cloud3"]},
+ zknode:{title:"HDInsight ZooKeeper node", kind:"machine", sys:"zk", what:"Three small virtual machines that run ZooKeeper for the cluster: leader election for the head-node services.", runs:"ZooKeeper.", talks:["Head nodes"], fails:"Majority (2 of 3) keeps working.", analogy:"The referees.", scenes:["cloud1"]},
+ cworker:{title:"HDInsight worker node", kind:"machine", sys:"azure", what:"Azure virtual machines that run NodeManagers and the YARN containers (Tez, MapReduce, Spark). Their local disks hold temporary and shuffle data, plus a small local HDFS (DataNodes here, NameNodes on the head nodes) used for scratch data that disappears with the cluster. The real data is read from and written to Azure Storage over the network (abfss:// for ADLS Gen2, wasbs:// for Blob). You can scale 4 → 40 workers, or let autoscale do it by load or schedule.", runs:"NodeManager; containers while jobs run.", talks:["Head nodes","ADLS Gen2"], fails:"Tasks are re-run on other workers. No permanent data is lost because none is kept here.", analogy:"Rented workbenches that you return at night.", scenes:["cloud3"]},
+ cedge:{title:"HDInsight edge node (optional)", kind:"machine", sys:"azure", what:"An optional VM inside the cluster's network where you can SSH in and run client tools, like the on-premises edge node.", runs:"Client tools.", talks:["Head nodes"], fails:"—", analogy:"The staff entrance.", scenes:["cloud1"]},
+ adls:{title:"Azure Storage account (ADLS Gen2 or Blob)", kind:"svc", sys:"azure", what:"Azure Data Lake Storage Gen2 takes the role of HDFS in the cloud. It is a storage service with real folders (hierarchical namespace) and access control, reached through the Hadoop FileSystem API with abfss://container@account.dfs.core.windows.net/path. Plain Blob storage is reached with wasbs://container@account.blob.core.windows.net/path; HDInsight clusters that ADF creates on demand must use Blob storage, not ADLS Gen2. Either way the storage exists independently of any cluster: delete the cluster and every file stays.", runs:"Managed by Azure; replicated by Azure, not by DataNodes.", talks:["HDInsight workers and head nodes (read/write over the network)","Power BI and other services"], fails:"Azure keeps redundant copies according to the redundancy option you choose.", analogy:"The permanent library building; clusters are reading rooms you rent.", scenes:["cloud1","cloud3","cloud4"]},
+ azuresql:{title:"Azure SQL Database (external Hive metastore)", kind:"svc", sys:"azure", what:"Holds the Hive table definitions outside the cluster. HDInsight's default metastore is deleted with the cluster; a custom (external) metastore in Azure SQL Database survives, so tomorrow's new cluster sees the same tables.", runs:"Managed by Azure.", talks:["HiveServer2 / Hive Metastore on the head nodes"], fails:"Queries cannot be compiled until it is back.", analogy:"The card catalogue kept in the permanent building, not in the rented room.", scenes:["cloud1","cloud3","cloud4"]},
+ billing:{title:"Compute billing", kind:"svc", sys:"azure", what:"HDInsight is billed per minute from the moment a cluster is created until it is deleted, even when it is idle. Storage is billed separately and continuously. That is why batch clusters are created for the job and deleted afterwards.", runs:"—", talks:["—"], fails:"—", analogy:"A taxi meter that runs while the taxi waits.", scenes:["cloud2","cloud4"]}
+};
+const SYSINFO = {
+ hdfs:"HDFS = a NameNode on Master 1 (active) and Master 2 (standby), a ZKFC beside each, JournalNodes on all three masters, and a DataNode on every worker. Blocks live only on worker disks.",
+ yarn:"YARN = a ResourceManager on Master 3 (active) and Master 2 (standby), and a NodeManager on every worker. Containers (dashed boxes) appear on workers only while jobs run.",
+ mr:"MapReduce and Tez are not daemons (apart from the optional MapReduce JobHistory Server): they exist only as tasks inside YARN containers on the workers, for as long as a job runs.",
+ hive:"Hive = Beeline/Power BI on clients, HiveServer2 + Metastore service + its MySQL database on the utility node. Hive's work runs as Tez tasks in YARN containers on the workers.",
+ hbase:"HBase = the HMaster on Master 3 and a RegionServer on every worker (next to the DataNode). Its WAL and HFiles are stored in HDFS. Clients find rows via ZooKeeper.",
+ kafka:"Kafka = brokers on their own machines (the Kafka rack), producers inside the app servers, and consumers such as Spark executors running in YARN containers on workers.",
+ zk:"ZooKeeper = three servers on Masters 1–3 forming one ensemble. Used by HDFS failover (ZKFC), ResourceManager failover, HBase and HiveServer2 discovery.",
+ spark:"Spark has no permanent daemons here: spark-submit on the edge node launches a driver (inside the AM container) and executors in YARN containers on workers.",
+ ingest:"Sqoop client and Flume agent run on the edge node; Oozie server on the utility node. Sqoop's real work runs as map tasks in YARN containers on workers.",
+ client:"Outside the cluster: your laptop, web servers, app servers and the orders database. The edge node is the cluster's front door for people.",
+ azure:"In the cloud: ADF, the storage account (ADLS Gen2 or Blob) and Azure SQL are managed services that outlive the cluster; gateways, head nodes, ZooKeeper nodes and workers are VMs that exist only while the cluster exists."
+};
+
+/* =====================================================================
+   3. THE ON-PREMISES MAP
+   ===================================================================== */
+const RACKS = [
+ {id:"r_out", x:20, w:228, title:"Outside the cluster", outside:true},
+ {id:"r_m", x:280, w:330, title:"Master rack"},
+ {id:"r_k", x:638, w:232, title:"Kafka rack"},
+ {id:"r_1", x:898, w:440, title:"Worker rack 1"},
+ {id:"r_2", x:1356, w:440, title:"Worker rack 2"}
+];
+const RACK = Object.fromEntries(RACKS.map(r=>[r.id,r]));
+const MACHINES = [
+ {id:"laptop", rack:"r_out", y:100, title:"Your laptop", sub:"not part of the cluster", info:"laptop", procs:[["beeline","Beeline","hive","beeline"],["hdfscli","hdfs client","hdfs","hdfscli"],["powerbi","Power BI","client","powerbi"]]},
+ {id:"web", rack:"r_out", y:245, title:"Web servers ×3", info:"web", procs:[["webapp","web app → logs","client","webapp"]]},
+ {id:"apps", rack:"r_out", y:326, title:"App servers", info:"apps", procs:[["producer","Kafka producer","kafka","producer"],["hbclient","HBase client","hbase","hbclient"]]},
+ {id:"mysql", rack:"r_out", y:434, title:"MySQL server", sub:"orders database", info:"mysqlsrv", procs:[["ordersdb","MySQL · orders","client","ordersdb"]]},
+ {id:"m1", rack:"r_m", y:100, title:"Master 1", info:"master", procs:[["nn1","NameNode · active","hdfs","namenode"],["zkfc1","ZKFC","hdfs","zkfc"],["jn1","JournalNode","hdfs","journalnode"],["zk1","ZooKeeper","zk","zookeeper"]]},
+ {id:"m2", rack:"r_m", y:260, title:"Master 2", info:"master", procs:[["nn2","NameNode · standby","hdfs","namenode"],["zkfc2","ZKFC","hdfs","zkfc"],["jn2","JournalNode","hdfs","journalnode"],["zk2","ZooKeeper","zk","zookeeper"],["rm2","ResourceManager · standby","yarn","resourcemanager"]]},
+ {id:"m3", rack:"r_m", y:447, title:"Master 3", info:"master", procs:[["rm1","ResourceManager · active","yarn","resourcemanager"],["jn3","JournalNode","hdfs","journalnode"],["zk3","ZooKeeper · leader","zk","zookeeper"],["hmaster","HMaster","hbase","hmaster"]]},
+ {id:"util", rack:"r_m", y:607, title:"Utility node", info:"utility", procs:[["hs2","HiveServer2","hive","hiveserver2"],["hms","Hive Metastore service","hive","hms"],["hmsdb","MySQL · metastore DB","hive","metastoredb"],["oozie","Oozie server","ingest","oozie"]]},
+ {id:"edge", rack:"r_m", y:767, title:"Edge node", sub:"where people log in", info:"edge", procs:[["clients","hdfs · yarn · beeline clients","client","clients"],["sparksubmit","spark-submit","spark","sparksubmit"],["sqoopcli","Sqoop client","ingest","sqoopcli"],["flume","Flume agent","ingest","flume"]]},
+ {id:"b1", rack:"r_k", y:100, title:"Kafka broker 1", info:"broker", type:"broker", parts:[["P0","leader"],["P2","follower"]], procs:[["kb1","Kafka broker","kafka","kafkabroker"]]},
+ {id:"b2", rack:"r_k", y:240, title:"Kafka broker 2", info:"broker", type:"broker", parts:[["P1","leader"],["P0","follower"]], procs:[["kb2","Kafka broker","kafka","kafkabroker"]]},
+ {id:"b3", rack:"r_k", y:380, title:"Kafka broker 3", info:"broker", type:"broker", parts:[["P2","leader"],["P1","follower"]], procs:[["kb3","Kafka broker","kafka","kafkabroker"]]}
+];
+["w1","w2","w3"].forEach((id,i)=>MACHINES.push({id, rack:"r_1", y:100+i*292, title:"Worker "+(i+1), sub:"rack 1", info:"worker", type:"worker"}));
+["w4","w5","w6"].forEach((id,i)=>MACHINES.push({id, rack:"r_2", y:100+i*292, title:"Worker "+(i+4), sub:"rack 2", info:"worker", type:"worker"}));
+for(const m of MACHINES){ if(m.type==="worker") m.procs=[["dn_"+m.id,"DataNode","hdfs","datanode"],["nm_"+m.id,"NodeManager","yarn","nodemanager"],["rs_"+m.id,"RegionServer","hbase","regionserver"]]; }
+
+/* cloud map */
+const CMACH = [
+ {id:"c_laptop", x:30, y:110, w:200, title:"Your laptop", sub:"Beeline · Power BI", info:"laptop", procs:[["c_beeline","Beeline / Power BI","hive","beeline"]]},
+ {id:"c_adf", x:300, y:110, w:250, title:"Azure Data Factory", sub:"managed service", info:"adf", svc:true, procs:[["c_trig","schedule trigger 01:00","azure","adf"],["c_pipe","pipeline: Hive activity","azure","adf"]]},
+ {id:"c_gw1", x:620, y:150, w:200, title:"Gateway node 1", sub:"managed by Azure", info:"gateway", cluster:true, procs:[["c_gwp1","HTTPS gateway","azure","gateway"]]},
+ {id:"c_gw2", x:620, y:262, w:200, title:"Gateway node 2", sub:"managed by Azure", info:"gateway", cluster:true, procs:[["c_gwp2","HTTPS gateway","azure","gateway"]]},
+ {id:"c_h0", x:850, y:150, w:280, title:"Head node 0 · active", info:"headnode", cluster:true, procs:[["c_hs2","HiveServer2","hive","hiveserver2"],["c_rm","ResourceManager · active","yarn","resourcemanager"],["c_amb","Ambari server","azure","headnode"]]},
+ {id:"c_h1", x:850, y:300, w:280, title:"Head node 1 · standby", info:"headnode", cluster:true, procs:[["c_hs2b","HiveServer2","hive","hiveserver2"],["c_rmb","ResourceManager · standby","yarn","resourcemanager"],["c_ambb","Ambari: starts on failover","azure","headnode"]]},
+ {id:"c_z1", x:1160, y:150, w:170, title:"ZooKeeper node 1", info:"zknode", cluster:true, procs:[["c_zk1","ZooKeeper","zk","zookeeper"]]},
+ {id:"c_z2", x:1160, y:240, w:170, title:"ZooKeeper node 2", info:"zknode", cluster:true, procs:[["c_zk2","ZooKeeper","zk","zookeeper"]]},
+ {id:"c_z3", x:1160, y:330, w:170, title:"ZooKeeper node 3", info:"zknode", cluster:true, procs:[["c_zk3","ZooKeeper","zk","zookeeper"]]},
+ {id:"c_edge", x:1360, y:150, w:390, title:"Edge node (optional)", sub:"SSH in, run client tools", info:"cedge", cluster:true, dashed:true, procs:[["c_cli","client tools","client","clients"]]}
+];
+for(let i=0;i<4;i++) CMACH.push({id:"c_w"+(i+1), x:620+i*285, y:440, w:268, title:"Worker node "+(i+1), info:"cworker", cluster:true, type:"cworker", procs:[["c_nm"+(i+1),"NodeManager","yarn","nodemanager"]]});
+
+/* =====================================================================
+   4. DRAWING
+   ===================================================================== */
+const defs = el("defs",{},svg);
+defs.innerHTML = '<filter id="glow" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="4" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>'+
+ '<filter id="soft" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="2.2"/></filter>';
+const W_ON = el("g",{id:"world_onprem"},svg);
+const W_CL = el("g",{id:"world_cloud",style:"display:none"},svg);
+function layers(root){ return {racks:el("g",{},root), net:el("g",{},root), mach:el("g",{},root), proc:el("g",{},root), dyn:el("g",{},root), pk:el("g",{},root)}; }
+const LO = layers(W_ON), LC = layers(W_CL);
+const NODES = {};   // id -> {kind, el, x,y,w,h, cx,cy, machine, info, sys, world}
+function reg(id,o){ NODES[id]=o; o.el.setAttribute("data-id",id); o.el.classList.add("focusable","clickable"); return o; }
+
+const CORE_Y = 37, TOR_Y = 73, LAN_X = 262;
+// core + rack frames
+(function drawOnprem(){
+  const core = el("g",{},LO.net);
+  el("rect",{x:LAN_X-6,y:CORE_Y-9,width:1800-LAN_X-2,height:18,rx:6,class:"netcore"},core);
+  txt(core,LAN_X+620,CORE_Y+4.5,"CORE SWITCH  ·  connects the racks (cross-rack traffic goes through here)","nettext");
+  reg("core",{kind:"net",el:core,info:"core",sys:"client",world:"onprem"});
+  for(const r of RACKS){
+    el("rect",{x:r.x,y:56,width:r.w,height:928,rx:12,class:"rack"},LO.racks);
+    txt(LO.racks,r.x+r.w-12,976,r.title,"racktitle",{"text-anchor":"end"});
+    if(r.outside){
+      const g=el("g",{},LO.net);
+      el("line",{x1:LAN_X,y1:CORE_Y,x2:LAN_X,y2:560,class:"netl"},g);
+      txt(g,LAN_X-6,580,"firewall / LAN","nettext",{"text-anchor":"end"});
+      continue;
+    }
+    const sx=r.x+9; r.sx=sx;
+    const g=el("g",{},LO.net);
+    el("line",{x1:sx,y1:CORE_Y,x2:sx,y2:TOR_Y,class:"netl"},g);
+    el("line",{x1:sx,y1:TOR_Y,x2:sx,y2:940,class:"netl"},g);
+    const tor=el("g",{},g);
+    el("rect",{x:r.x+2,y:TOR_Y-10,width:118,height:20,rx:5,class:"netcore"},tor);
+    txt(tor,r.x+12,TOR_Y+4.5,"ToR switch","nettext");
+    reg("tor_"+r.id,{kind:"net",el:tor,info:"tor",sys:"client",world:"onprem"});
+  }
+})();
+
+function procLayout(m){
+  // returns [[x,y,w,h], ...] for each proc chip
+  const out=[];
+  if(m.type==="worker"){ const cw=(m.w-24-12)/3; m.procs.forEach((p,i)=>out.push([m.x+12+i*(cw+6), m.y+40, cw, 24])); return out; }
+  if(m.type==="cworker"){ out.push([m.x+12,m.y+36,m.w-24,26]); return out; }
+  m.procs.forEach((p,i)=>out.push([m.x+12, m.y+(m.sub?46:36)+i*27, m.w-24, 23]));
+  return out;
+}
+function drawMachine(m, L, world){
+  const r = m.rack ? RACK[m.rack] : null;
+  if(r){ m.x=r.x+20; m.w=r.w-30; }
+  const head = m.sub?46:36;
+  if(m.type==="worker") m.h=276;
+  else if(m.type==="cworker") m.h=184;
+  else if(m.type==="broker") m.h=128;
+  else m.h = head + m.procs.length*27 + 6;
+  const g=el("g",{class:"mach"+(m.svc?" store":"")},L.mach);
+  el("rect",{x:m.x,y:m.y,width:m.w,height:m.h,rx:10,class:"body", "stroke-dasharray":m.dashed?"7 5":"none"},g);
+  // small server icon
+  if(!m.svc){ for(let k=0;k<3;k++) el("rect",{x:m.x+m.w-26,y:m.y+9+k*6,width:16,height:4,rx:1,class:"ico"},g); }
+  txt(g,m.x+12,m.y+21,m.title,"t");
+  if(m.sub) txt(g,m.x+12,m.y+37,m.sub,"s");
+  reg(m.id,{kind:"machine",el:g,x:m.x,y:m.y,w:m.w,h:m.h,cx:m.x+m.w/2,cy:m.y+m.h/2,info:m.info,machine:m.id,rack:m.rack,world,m});
+  const lay=procLayout(m);
+  m.procs.forEach((p,i)=>{
+    const [x,y,w,h]=lay[i]; const [id,label,sys,info]=p; const c=SYS[sys].c;
+    const pg=el("g",{class:"proc"},L.proc);
+    el("rect",{x,y,width:w,height:h,fill:shade(c,0.16),stroke:c},pg);
+    el("circle",{cx:x+11,cy:y+h/2,r:4,fill:c},pg);
+    const t=txt(pg,x+21,y+h/2+4.2,label,"",{fill:"#F4F6FB"});
+    reg(id,{kind:"proc",el:pg,x,y,w,h,cx:x+w/2,cy:y+h/2,machine:m.id,info,sys,world,label,labelEl:t});
+  });
+  if(r){ // port line to spine
+    const py=m.y+18; m.port=[m.x,py];
+    if(r.outside){ el("line",{x1:m.x+m.w,y1:py,x2:LAN_X,y2:py,class:"netl"},LO.net); m.port=[m.x+m.w,py]; }
+    else el("line",{x1:r.sx,y1:py,x2:m.x,y2:py,class:"netl"},LO.net);
+  }
+  if(m.type==="worker"){
+    txt(g,m.x+12,m.y+84,"YARN containers — temporary, started by the NodeManager","lbl2");
+    m.slots=[]; const sw=(m.w-24-18)/4;
+    for(let row=0;row<2;row++) for(let col=0;col<4;col++){ const sx=m.x+12+col*(sw+6), sy=m.y+92+row*42; el("rect",{x:sx,y:sy,width:sw,height:36,rx:6,class:"slot"},g); m.slots.push({x:sx,y:sy,w:sw,h:36,used:null}); }
+    el("rect",{x:m.x+10,y:m.y+186,width:m.w-20,height:80,rx:8,fill:"#141D33",stroke:"#2B3A5C"},g);
+    txt(g,m.x+20,m.y+202,"Local disks · HDFS blocks (plain files)","lbl2");
+    m.disk={x:m.x+20,y:m.y+210,n:0};
+  }
+  if(m.type==="cworker"){
+    txt(g,m.x+12,m.y+80,"YARN containers","lbl2");
+    txt(g,m.x+12,m.y+176,"local disk: temp, shuffle, scratch HDFS","lbl2");
+    m.slots=[]; const sw=(m.w-24-6)/2;
+    for(let row=0;row<2;row++) for(let col=0;col<2;col++){ const sx=m.x+12+col*(sw+6), sy=m.y+88+row*38; el("rect",{x:sx,y:sy,width:sw,height:32,rx:6,class:"slot"},g); m.slots.push({x:sx,y:sy,w:sw,h:32,used:null}); }
+  }
+  if(m.type==="broker"){
+    m.parts.forEach((pp,i)=>{
+      const x=m.x+12+i*((m.w-30)/2+6), y=m.y+76, w=(m.w-30)/2;
+      const pg=el("g",{},g); const lead=pp[1]==="leader";
+      el("rect",{x,y,width:w,height:40,rx:6,fill:lead?shade(SYS.kafka.c,0.45):"#1A2540",stroke:SYS.kafka.c,"stroke-dasharray":lead?"none":"4 3"},pg);
+      txt(pg,x+w/2,y+17,pp[0],"",{"text-anchor":"middle",fill:"#fff","font-size":13,"font-weight":800});
+      txt(pg,x+w/2,y+33,pp[1],"",{"text-anchor":"middle",fill:"#D9CCFF","font-size":11});
+      NODES["part_"+m.id+"_"+pp[0]]={kind:"part",el:pg,cx:x+w/2,cy:y+20,machine:m.id,world};
+    });
+  }
+}
+MACHINES.forEach(m=>drawMachine(m,LO,"onprem"));
+const MACH = Object.fromEntries(MACHINES.map(m=>[m.id,m]));
+
+/* cloud drawing */
+const CBUS = 662;
+const CSTORE = {};
+(function drawCloud(){
+  const L=LC;
+  el("rect",{x:270,y:66,width:1515,height:920,rx:16,fill:"#0F1A30",stroke:"#21406B"},L.racks);
+  txt(L.racks,290,976,"Azure region","frametitle");
+  const fr=el("rect",{x:600,y:118,width:1170,height:510,rx:14,class:"frame",id:"cframe"},L.racks);
+  txt(L.racks,618,140,"HDInsight cluster — temporary, billed per minute while it exists","frametitle",{id:"cframeT"});
+  el("line",{x1:130,y1:CBUS,x2:1770,y2:CBUS,class:"netl","stroke-width":3},L.net);
+  txt(L.net,1770,CBUS-8,"Azure network","nettext",{"text-anchor":"end"});
+  CMACH.forEach(m=>drawMachine(m,L,"cloud"));
+  for(const m of CMACH){ el("line",{x1:m.x+m.w/2,y1:m.y+m.h,x2:m.x+m.w/2,y2:CBUS,class:"netl",opacity:.6},L.net); }
+  // storage account
+  const s=el("g",{class:"mach store"},L.mach);
+  el("rect",{x:600,y:700,width:740,height:270,rx:12,class:"body"},s);
+  txt(s,616,724,"Azure Storage account — permanent, survives cluster deletion","t");
+  txt(s,616,742,"ADF on-demand clusters: Blob (wasbs://)  ·  clusters you create: usually ADLS Gen2 (abfss://)","s");
+  reg("c_adls",{kind:"machine",el:s,x:600,y:700,w:740,h:270,cx:970,cy:760,info:"adls",machine:"c_adls",world:"cloud"});
+  const f1=el("g",{},s); el("rect",{x:616,y:756,width:708,height:96,rx:8,fill:"#0F2440",stroke:"#2D5A8C"},f1); txt(f1,630,776,"/raw/calls/2026/11/07/","s",{fill:"#BFE0FF","font-size":13});
+  const f2=el("g",{},s); el("rect",{x:616,y:862,width:708,height:96,rx:8,fill:"#0F2440",stroke:"#2D5A8C"},f2); txt(f2,630,882,"/curated/minutes_by_city/","s",{fill:"#BFE0FF","font-size":13});
+  CSTORE.raw={x:630,y:788,n:0}; CSTORE.cur={x:630,y:894,n:0};
+  el("line",{x1:970,y1:700,x2:970,y2:CBUS,class:"netl","stroke-width":3},L.net);
+  const q=el("g",{class:"mach store"},L.mach);
+  el("rect",{x:1370,y:700,width:400,height:120,rx:12,class:"body"},q);
+  txt(q,1386,724,"Azure SQL Database","t"); txt(q,1386,742,"external Hive metastore — survives deletion","s");
+  const qp=el("g",{class:"proc"},L.proc); el("rect",{x:1386,y:756,width:368,height:26,fill:shade(SYS.hive.c,.16),stroke:SYS.hive.c},qp); el("circle",{cx:1397,cy:769,r:4,fill:SYS.hive.c},qp); txt(qp,1407,773,"Hive table definitions","",{fill:"#F4F6FB"});
+  reg("c_sql",{kind:"machine",el:q,x:1370,y:700,w:400,h:120,cx:1570,cy:760,info:"azuresql",machine:"c_sql",world:"cloud"});
+  reg("c_sqlp",{kind:"proc",el:qp,x:1386,y:756,w:368,h:26,cx:1570,cy:769,machine:"c_sql",info:"metastoredb",sys:"hive",world:"cloud",label:"Hive table definitions"});
+  el("line",{x1:1570,y1:700,x2:1570,y2:CBUS,class:"netl","stroke-width":3},L.net);
+  const b=el("g",{class:"mach store"},L.mach);
+  el("rect",{x:1370,y:838,width:400,height:132,rx:12,class:"body"},b);
+  txt(b,1386,862,"Compute billing (HDInsight)","t");
+  CSTORE.billT=txt(b,1386,910,"0 h 00 min","",{fill:"#FFFFFF","font-size":34,"font-weight":800});
+  CSTORE.billS=txt(b,1386,946,"cluster does not exist — meter stopped","s");
+  reg("c_bill",{kind:"machine",el:b,x:1370,y:838,w:400,h:132,cx:1570,cy:900,info:"billing",machine:"c_bill",world:"cloud"});
+})();
+const CMAP = Object.fromEntries(CMACH.map(m=>[m.id,m]));
+function M(id){ return MACH[id] || CMAP[id]; }
+const ORIG_LABEL = {}; for(const id in NODES) if(NODES[id].labelEl) ORIG_LABEL[id]=NODES[id].label;
+
+/* =====================================================================
+   5. ANIMATION ENGINE
+   ===================================================================== */
+const ABORT = {abort:true};
+let token = 0, paused = false, speed = 1, stepMode = false, mode = "watch", curWorld = "onprem";
+const tweens = new Set(); let waiters = [];
+let last = performance.now();
+function loop(now){
+  const dt = Math.min(0.1,(now-last)/1000); last = now;
+  if(!paused){ for(const t of [...tweens]){ t.e += dt*speed; const p=Math.min(1,t.e/t.d); try{ t.fn(p); }catch(e){} if(p>=1){ tweens.delete(t); t.res(); } } }
+  requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
+function tween(d, fn){ return new Promise((res,rej)=>{ tweens.add({d:Math.max(d,0.001),e:0,fn:fn||(()=>{}),res,rej}); }); }
+function sleep(s){ return tween(s); }
+function abortAll(){ for(const t of tweens) t.rej(ABORT); tweens.clear(); for(const w of waiters) w.rej(ABORT); waiters=[]; }
+function all(...ps){ return Promise.all(ps); }
+function quiet(p){ return p.catch(()=>{}); }
+
+/* ---------- dynamic items ---------- */
+let DYN = []; let contN = 0;
+const CONT = {am:{c:"#4FA3F7",info:"am",sys:"yarn"}, map:{c:"#7BD389",info:"maptask",sys:"mr"}, red:{c:"#3FBF7F",info:"reducetask",sys:"mr"},
+  tez:{c:"#7BD389",info:"teztask",sys:"mr"}, sexec:{c:"#FF8A3D",info:"sparkexec",sys:"spark"}, sdrv:{c:"#FF8A3D",info:"sparkdriver",sys:"spark"}, sqmap:{c:"#F5D547",info:"sqoopmap",sys:"ingest"}};
+const BLK = {blk:{f:"#F2A93B",t:"#2A1A00"}, new:{f:"#F2A93B33",t:"#F2A93B",s:"#F2A93B",dash:"3 2"}, out:{f:"#7BD389",t:"#0E2A17"},
+  wal:{f:"#F26B5B33",t:"#FFB3AA",s:"#F26B5B"}, hfile:{f:"#F26B5B",t:"#2A0B07"}, log:{f:"#F5D547",t:"#2A2400"}, sp:{f:"#FF8A3D",t:"#2A1200"},
+  sq:{f:"#F5D547",t:"#2A2400"}, lost:{f:"#3A3F4C",t:"#8A90A0"}};
+function dynLayer(){ return curWorld==="cloud"?LC.dyn:LO.dyn; }
+function addCont(mid,label,kind){
+  const m=M(mid); const slot=m.slots.find(s=>!s.used); if(!slot) return null;
+  const k=CONT[kind]; const id="ct"+(++contN);
+  const g=el("g",{class:"cont",opacity:0},dynLayer());
+  el("rect",{x:slot.x,y:slot.y,width:slot.w,height:slot.h,rx:6,fill:shade(k.c,.22),stroke:k.c},g);
+  txt(g,slot.x+slot.w/2,slot.y+slot.h/2+4,label,"",{"text-anchor":"middle",fill:"#fff"});
+  slot.used=id;
+  reg(id,{kind:"cont",el:g,x:slot.x,y:slot.y,w:slot.w,h:slot.h,cx:slot.x+slot.w/2,cy:slot.y+slot.h/2,machine:mid,info:k.info,sys:k.sys,world:curWorld,slot,label});
+  DYN.push(id); quiet(tween(0.35,p=>g.setAttribute("opacity",p)));
+  return id;
+}
+function removeCont(id){ const n=NODES[id]; if(!n) return; n.slot.used=null; const g=n.el; delete NODES[id]; DYN=DYN.filter(x=>x!==id); quiet(tween(0.35,p=>g.setAttribute("opacity",1-p))).then(()=>g.remove()); setTimeout(()=>g.remove(),1500); }
+function clearConts(){ for(const id of [...DYN]) if(NODES[id] && NODES[id].kind==="cont") removeCont(id); }
+function addBlock(mid,label,cls){
+  const m=M(mid); const d=m.disk; const i=d.n++; const per=7; const x=d.x+(i%per)*50, y=d.y+Math.floor(i/per)*28;
+  const st=BLK[cls||"blk"]; const id="bk_"+mid+"_"+label+"_"+i;
+  const g=el("g",{class:"blk",opacity:0},dynLayer());
+  el("rect",{x,y,width:45,height:24,fill:st.f,stroke:st.s||"none","stroke-dasharray":st.dash||"none","stroke-width":1.5},g);
+  txt(g,x+22.5,y+16,label,"",{"text-anchor":"middle",fill:st.t});
+  reg(id,{kind:"blk",el:g,x,y,w:45,h:24,cx:x+22,cy:y+12,machine:mid,info:"block",sys:"hdfs",world:curWorld,label,cls});
+  DYN.push(id); quiet(tween(0.3,p=>g.setAttribute("opacity",p)));
+  return id;
+}
+function findBlock(mid,label){ return DYN.find(id=>NODES[id] && NODES[id].kind==="blk" && NODES[id].machine===mid && NODES[id].label===label); }
+function addFile(where,label,cls){ // cloud ADLS file chip
+  const s=CSTORE[where]; const i=s.n++; const x=s.x+i*112, y=s.y;
+  const st=BLK[cls||"blk"]; const id="cf_"+where+"_"+i;
+  const g=el("g",{class:"blk",opacity:0},LC.dyn);
+  el("rect",{x,y,width:104,height:46,rx:6,fill:st.f},g);
+  txt(g,x+52,y+28,label,"",{"text-anchor":"middle",fill:st.t,"font-size":12});
+  reg(id,{kind:"blk",el:g,x,y,w:104,h:46,cx:x+52,cy:y+23,machine:"c_adls",info:"adls",sys:"azure",world:"cloud",label});
+  DYN.push(id); quiet(tween(0.3,p=>g.setAttribute("opacity",p))); return id;
+}
+function setLabel(id,s){ const n=NODES[id]; if(n&&n.labelEl){ n.labelEl.textContent=s; n.label=s; } }
+function glow(id,on){ const n=NODES[id]; if(n) n.el.classList.toggle("glow",on!==false); }
+const DEAD = new Set();
+function setDead(mid,on){
+  const n=NODES[mid]; n.el.classList.toggle("dead",on);
+  for(const id in NODES){ const x=NODES[id]; if(x.machine===mid && x.kind==="proc") x.el.classList.toggle("dead",on); if(x.machine===mid && x.kind==="blk" && on) x.el.style.opacity=.35; }
+  if(on){ DEAD.add(mid); const m=M(mid); const g=el("g",{},dynLayer()); el("line",{x1:m.x+m.w-60,y1:m.y+8,x2:m.x+m.w-36,y2:m.y+32,class:"xmark"},g); el("line",{x1:m.x+m.w-36,y1:m.y+8,x2:m.x+m.w-60,y2:m.y+32,class:"xmark"},g); DYN.push("x_"+mid); NODES["x_"+mid]={el:g,kind:"deco",machine:mid,world:curWorld}; }
+  else DEAD.delete(mid);
+}
+function clusterVisible(on){
+  for(const m of CMACH) if(m.cluster){ NODES[m.id].el.classList.toggle("off",!on); for(const p of m.procs) NODES[p[0]].el.classList.toggle("off",!on); }
+  document.getElementById("cframe").style.opacity=on?1:.15; document.getElementById("cframeT").style.opacity=on?1:.3;
+}
+function clusterFade(on,dur){ // staggered appear/disappear
+  const ms=CMACH.filter(m=>m.cluster);
+  return tween(dur,p=>{ ms.forEach((m,i)=>{ const th=i/ms.length; const vis=on?p>th:p<th; NODES[m.id].el.classList.toggle("off",!vis); for(const pr of m.procs) NODES[pr[0]].el.classList.toggle("off",!vis); }); document.getElementById("cframe").style.opacity=on?(.15+.85*p):(1-.85*p); });
+}
+
+/* ---------- focus / highlight ---------- */
+function F(...ids){
+  ids=ids.flat().filter(Boolean);
+  const bright=new Set();
+  for(const id of ids){ bright.add(id); const n=NODES[id]; if(!n) continue; if(n.kind!=="machine" && n.machine) bright.add(n.machine); if(n.kind==="machine") for(const k in NODES) if(NODES[k].machine===id) bright.add(k); }
+  const any=ids.length>0;
+  for(const id in NODES){ const n=NODES[id]; if(n.world!==curWorld && n.world) continue; if(n.kind==="deco"){ n.el.classList.toggle("dim",any && !bright.has(n.machine)); continue; } n.el.classList.toggle("dim", any && !bright.has(id)); }
+  const L=curWorld==="cloud"?LC:LO;
+  L.net.classList.toggle("dim", any && !ids.some(i=>NODES[i] && NODES[i].kind==="net"));
+}
+
+/* ---------- routing ---------- */
+function upPath(m,p){
+  const r=RACK[m.rack];
+  if(r.outside) return [[m.x+m.w-5,p[1]],[m.x+m.w-5,m.port[1]],[LAN_X,m.port[1]],[LAN_X,CORE_Y]];
+  return [[m.x+5,p[1]],[m.x+5,m.port[1]],[r.sx,m.port[1]],[r.sx,TOR_Y]];
+}
+function routeOn(a,b){
+  const na=NODES[a], nb=NODES[b]; const ma=MACH[na.machine], mb=MACH[nb.machine];
+  const pa=[na.cx,na.cy], pb=[nb.cx,nb.cy];
+  if(ma===mb){ const x=ma.x+ma.w-8; return [pa,[x,pa[1]],[x,pb[1]],pb]; }
+  const A=upPath(ma,pa), B=upPath(mb,pb).reverse();
+  const pts=[pa,...A];
+  if(ma.rack===mb.rack){ pts.push(...B.slice(1)); }
+  else { if(!RACK[ma.rack].outside) pts.push([A[A.length-1][0],CORE_Y]); pts.push([B[0][0],CORE_Y]); if(!RACK[mb.rack].outside) pts.push(B[0]); pts.push(...B.slice(1)); }
+  pts.push(pb); return pts;
+}
+function routeCl(a,b){
+  const na=NODES[a], nb=NODES[b]; const pa=[na.cx,na.cy], pb=[nb.cx,nb.cy];
+  if(na.machine===nb.machine){ return [pa,pb]; }
+  const ya = na.machine==="c_adls"||na.machine==="c_sql"||na.machine==="c_bill" ? NODES[na.machine].y : (M(na.machine).y+M(na.machine).h);
+  const yb = nb.machine==="c_adls"||nb.machine==="c_sql"||nb.machine==="c_bill" ? NODES[nb.machine].y : (M(nb.machine).y+M(nb.machine).h);
+  const busOrTop = (y)=> y>CBUS ? y : y;
+  return [pa,[pa[0],ya],[pa[0],CBUS],[pb[0],CBUS],[pb[0],yb],pb].map(p=>[p[0],busOrTop(p[1])]);
+}
+function plen(pts){ let L=0; for(let i=1;i<pts.length;i++) L+=Math.hypot(pts[i][0]-pts[i-1][0],pts[i][1]-pts[i-1][1]); return L; }
+function pat(pts,L,p){ let d=p*L; for(let i=1;i<pts.length;i++){ const s=Math.hypot(pts[i][0]-pts[i-1][0],pts[i][1]-pts[i-1][1]); if(d<=s||i===pts.length-1){ const t=s?Math.min(1,d/s):1; return [pts[i-1][0]+(pts[i][0]-pts[i-1][0])*t, pts[i-1][1]+(pts[i][1]-pts[i-1][1])*t]; } d-=s; } return pts[pts.length-1]; }
+const COL = {data:"#F2A93B", ctrl:"#E8EDF6", ack:"#4FA3F7", zk:"#5FD3C8", hive:"#E86FB0", kafka:"#B392F0", hbase:"#F26B5B", mr:"#7BD389", spark:"#FF8A3D", ingest:"#F5D547", yarn:"#4FA3F7", azure:"#3BA3FF"};
+function P(a,b,o){
+  o=o||{}; if(!NODES[a]||!NODES[b]) return Promise.resolve();
+  const pts=(curWorld==="cloud"?routeCl:routeOn)(a,b); const L=plen(pts);
+  const d=o.d || Math.min(3.2,Math.max(0.55,L/(o.v||640)));
+  const c=COL[o.c]||o.c||COL.ctrl; const layer=curWorld==="cloud"?LC.pk:LO.pk;
+  const g=el("g",{class:"pkt"},layer);
+  let trail=null;
+  if(!o.faint){ trail=el("polyline",{points:pts.map(p=>p.join(",")).join(" "),fill:"none",stroke:c,"stroke-width":o.big?3:2,opacity:.35,"stroke-dasharray":o.big?"none":"6 5"},g); }
+  const r=o.faint?3:(o.big?7.5:5.5);
+  const dot=el("circle",{r,fill:c,filter:o.faint?"none":"url(#glow)",opacity:o.faint?.55:1},g);
+  let lab=null; if(o.label){ lab=txt(g,0,0,o.label,"",{fill:c,"text-anchor":"middle"}); }
+  return tween(d,p=>{ const [x,y]=pat(pts,L,p); dot.setAttribute("cx",x); dot.setAttribute("cy",y); if(lab){ lab.setAttribute("x",x); lab.setAttribute("y",y-11); } })
+    .then(()=>{ g.remove(); }, e=>{ g.remove(); throw e; });
+}
+function Pq(a,b,o){ return quiet(P(a,b,o)); } // fire and forget
+async function pipe(src,dns,label,o){
+  o=o||{}; const fast=o.fast; const cls=o.cls||"blk"; const v=fast?1100:640;
+  let prev=src;
+  for(const dn of dns){ await P(prev,dn,{c:o.c||"data",big:true,label:fast?"":(prev===src?label+" packets":"forward"),v}); addBlock(NODES[dn].machine,label,cls); prev=dn; }
+  if(o.noack) return;
+  const back=[...dns].reverse(); back.push(src);
+  for(let i=0;i<back.length-1;i++) await P(back[i],back[i+1],{c:"ack",label:fast||i>0?"":"ack",v:v*1.5});
+}
+
+/* ---------- heartbeats & ambient loops ---------- */
+let activeNN="nn1";
+function startHeartbeats(world){
+  const my=token;
+  (async()=>{ try{ while(my===token){
+      if(curWorld==="onprem"){
+        for(const w of ["w1","w2","w3","w4","w5","w6"]) if(!DEAD.has(w)){ Pq("dn_"+w,activeNN,{faint:true,c:"data",v:900}); { const sb=activeNN==="nn1"?"nn2":"nn1"; if(!DEAD.has(sb==="nn1"?"m1":"m2")) Pq("dn_"+w,sb,{faint:true,c:"data",v:900}); } Pq("nm_"+w,"rm1",{faint:true,c:"yarn",v:900}); }
+      }
+      await sleep(2.2);
+  } }catch(e){} })();
+}
+
+/* ---------- cards ---------- */
+const cardsEl=document.getElementById("cards");
+function card(id,html){ let c=document.getElementById("card_"+id); if(!c){ c=document.createElement("div"); c.className="card"; c.id="card_"+id; cardsEl.appendChild(c); } c.innerHTML=html; return c; }
+function uncard(id){ const c=document.getElementById("card_"+id); if(c) c.remove(); }
+function clearCards(){ cardsEl.innerHTML=""; }
+function setBill(min){ CSTORE.billMin=min; const h=Math.floor(min/60), m=Math.floor(min%60); CSTORE.billT.textContent=h+" h "+String(m).padStart(2,"0")+" min"; }
+
+/* ---------- captions ---------- */
+const capEl=document.getElementById("caption"); let transcript=[];
+let nextResolver=null;
+function waitNext(){ return new Promise((res,rej)=>{ const w={res,rej}; waiters.push(w); nextResolver=()=>{ waiters=waiters.filter(x=>x!==w); nextResolver=null; res(); }; }); }
+async function say(t){
+  capEl.innerHTML=t+(stepMode?'<span class="hint">Lecture mode: press → or click here to continue</span>':"");
+  transcript.push(t); renderPanel();
+  if(stepMode){ await waitNext(); }
+  else { const words=t.split(/\s+/).length; await sleep(Math.min(11,Math.max(3,1.4+words*0.3))); }
+}
+
+/* =====================================================================
+   6. WORLD RESET + BASELINES
+   ===================================================================== */
+const CALLS = {B1:["w1","w4","w5"], B2:["w2","w6","w4"], B3:["w5","w1","w3"], B4:["w3","w5","w6"], B5:["w6","w2","w1"]};
+function showWorld(w){
+  curWorld=w; W_ON.style.display=w==="onprem"?"":"none"; W_CL.style.display=w==="cloud"?"":"none";
+  document.querySelectorAll("#worldSeg button").forEach(b=>b.classList.toggle("on",b.dataset.w===w));
+}
+function resetWorld(w){
+  abortAll();
+  for(const id of DYN){ const n=NODES[id]; if(n){ n.el.remove(); delete NODES[id]; } }
+  DYN=[]; LO.pk.innerHTML=""; LC.pk.innerHTML="";
+  for(const m of [...MACHINES,...CMACH]){ if(m.slots) m.slots.forEach(s=>s.used=null); if(m.disk) m.disk.n=0; }
+  CSTORE.raw.n=0; CSTORE.cur.n=0;
+  for(const mid of [...DEAD]) setDead(mid,false);
+  for(const id in ORIG_LABEL) setLabel(id,ORIG_LABEL[id]);
+  for(const id in NODES) NODES[id].el.classList.remove("glow","dim");
+  LO.net.classList.remove("dim"); LC.net.classList.remove("dim");
+  activeNN="nn1"; clearCards(); showWorld(w); clusterVisible(true); setBill(0); CSTORE.billS.textContent="cluster does not exist — meter stopped";
+}
+function putCalls(){ for(const b in CALLS) for(const w of CALLS[b]) addBlock(w,b,"blk"); }
+function base(o){ o=o||{}; if(o.blocks!==false) putCalls(); if(o.hb!==false) startHeartbeats(); }
+function cbase(o){ o=o||{}; addFile("raw","calls_2026","blk"); if(o.curated){ addFile("cur","part-0","out"); addFile("cur","part-1","out"); } }
+const ALLW=["w1","w2","w3","w4","w5","w6"], DNS=ALLW.map(w=>"dn_"+w), NMS=ALLW.map(w=>"nm_"+w);
+
+/* =====================================================================
+   7. THE STORY (scenes)
+   ===================================================================== */
+const SCENES = [
+{id:"intro", ch:"1 · The map", title:"What you are looking at", world:"onprem", async run(){
+  base({blocks:false,hb:false});
+  await say("This is one Hadoop cluster in a data centre. Everything on screen is one of five things: <b>machines</b>, <b>programs</b>, temporary <b>containers</b>, <b>data blocks</b>, or the <b>network</b>.");
+  F(MACHINES.map(m=>m.id)); await say("Grey boxes are <b>machines</b>: real servers (or virtual machines) with their own CPUs, memory and disks.");
+  F(Object.keys(NODES).filter(k=>NODES[k].kind==="proc"&&NODES[k].world==="onprem")); await say("Coloured pills are <b>programs</b> running on those machines. The colour says which system each belongs to: amber HDFS, blue YARN, green MapReduce/Tez tasks, pink Hive, red HBase, purple Kafka, teal ZooKeeper, orange Spark, yellow Sqoop/Flume/Oozie.");
+  F("core","tor_r_m","tor_r_k","tor_r_1","tor_r_2"); await say("Machines sit in <b>racks</b>. Each rack has a top-of-rack switch; the core switch joins the racks. Traffic inside a rack is cheap; traffic between racks crosses the core.");
+  F("m1","m2","m3","util","edge"); await say("The <b>master rack</b> runs the 'brains': programs that keep metadata and make decisions. Masters store no user data. The utility node hosts Hive's front desk; the edge node is where people log in.");
+  F(ALLW); await say("<b>Workers</b> do the real work. Every worker runs the same three always-on programs: a <b>DataNode</b> (stores blocks), a <b>NodeManager</b> (runs tasks) and an HBase <b>RegionServer</b>.");
+  const c=addCont("w1","a task","map"); addBlock("w1","B1","blk"); F("w1");
+  await say("Dashed boxes are <b>containers</b>: temporary slices of a worker's CPU and memory that YARN lends to a job. Tasks run inside them and vanish when the job ends. Small squares on the disks are HDFS <b>blocks</b>.");
+  removeCont(c); F("b1","b2","b3"); await say("Kafka usually gets its own machines: <b>brokers</b> that store streams of events.");
+  F("laptop","web","apps","mysql"); await say("Outside the cluster: your laptop, the web servers, the app servers and the orders database. They <b>use</b> Hadoop but are not part of it.");
+  F(); await say("Tip: click anything at any time to pause and read a deep dive about it. Now let's switch the cluster on.");
+}},
+{id:"boot", ch:"2 · Start-up", title:"The cluster wakes up", world:"onprem", async run(){
+  base({blocks:false,hb:false});
+  ["nn1","nn2"].forEach(i=>setLabel(i,"NameNode · starting")); ["rm1","rm2"].forEach(i=>setLabel(i,"ResourceManager · starting")); setLabel("zk3","ZooKeeper");
+  F("zk1","zk2","zk3"); await say("First the three <b>ZooKeeper</b> servers on Masters 1–3 find each other and elect a leader. Every decision needs a majority: 2 of 3.");
+  await all(P("zk1","zk3",{c:"zk",label:"vote"}),P("zk2","zk3",{c:"zk",label:"vote"}));
+  await all(P("zk3","zk1",{c:"zk"}),P("zk3","zk2",{c:"zk"})); setLabel("zk3","ZooKeeper · leader");
+  F("nn1","zkfc1","nn2","zkfc2","zk3"); await say("Beside each NameNode runs a <b>ZKFC</b>. Both try to create the same 'active' lock in ZooKeeper; only one can win.");
+  await all(P("zkfc1","zk3",{c:"zk",label:"lock?"}),P("zkfc2","zk3",{c:"zk",label:"lock?"}));
+  await P("zk3","zkfc1",{c:"zk",label:"it's yours"}); setLabel("nn1","NameNode · active"); setLabel("nn2","NameNode · standby"); glow("nn1");
+  await say("Master 1 won, so its NameNode is <b>active</b>. Master 2's NameNode becomes the <b>standby</b>, ready to take over.");
+  glow("nn1",false); F("rm1","rm2","zk3");
+  await all(P("rm1","zk3",{c:"zk",label:"elect"}),P("rm2","zk3",{c:"zk",label:"elect"})); setLabel("rm1","ResourceManager · active"); setLabel("rm2","ResourceManager · standby");
+  await say("The two <b>ResourceManagers</b> elect an active one through ZooKeeper too (the election logic is built into the ResourceManager, so there is no separate ZKFC): Master 3's wins.");
+  F(DNS,"nn1","nn2"); await all(...DNS.map(d=>P(d,"nn1",{c:"data"})),...DNS.map(d=>P(d,"nn2",{c:"data"})));
+  await say("Every <b>DataNode</b> registers with <b>both</b> NameNodes, then sends a heartbeat every 3 seconds plus regular reports listing every block it holds.");
+  F(NMS,"rm1"); await all(...NMS.map(n=>P(n,"rm1",{c:"yarn",label:n==="nm_w1"?"free CPU + memory":""})));
+  await say("Every <b>NodeManager</b> tells the ResourceManager how much CPU and memory it can offer, about once a second.");
+  F(); startHeartbeats(); await say("From now on you'll see these heartbeats ticking in the background. The cluster is ready, and still empty.");
+}},
+{id:"write", ch:"3 · HDFS", title:"Storing a file", world:"onprem", async run(){
+  base({blocks:false});
+  card("file","<h4>The file</h4><div class='big'>calls_2026.csv</div>515 MB → 5 blocks:<br>4 × 128 MB + 1 × 3 MB");
+  F("hdfscli","nn1"); await say("On your laptop: <b>hdfs dfs -put calls_2026.csv</b>. The 515 MB file will be cut into five blocks: four of 128 MB and a last one of just 3 MB.");
+  await P("hdfscli","nn1",{label:"where should B1 go?"}); await P("nn1","hdfscli",{label:"Worker 1, 4, 5"});
+  await say("The NameNode picks three DataNodes. Your laptop is outside the cluster, so copy 1 goes to a random worker (Worker 1); copies 2 and 3 go to two machines on the <b>other</b> rack.");
+  F("hdfscli","dn_w1","dn_w4","dn_w5","core");
+  await pipe("hdfscli",["dn_w1","dn_w4","dn_w5"],"B1");
+  await say("That was the <b>replication pipeline</b>: the laptop sends each 64 KB packet once, to Worker 1. Worker 1 stores it and forwards it across the core switch to Worker 4, which forwards it inside its rack to Worker 5. Acknowledgements flow back.");
+  F("hdfscli",DNS);
+  await all(pipe("hdfscli",["dn_w2","dn_w6","dn_w4"],"B2",{fast:true}), pipe("hdfscli",["dn_w5","dn_w1","dn_w3"],"B3",{fast:true}));
+  await all(pipe("hdfscli",["dn_w3","dn_w5","dn_w6"],"B4",{fast:true}), pipe("hdfscli",["dn_w6","dn_w2","dn_w1"],"B5",{fast:true}));
+  F("nn1",DNS); card("map","<h4>NameNode's block map</h4><table><tr><td>B1</td><td>W1 · W4 · W5</td></tr><tr><td>B2</td><td>W2 · W6 · W4</td></tr><tr><td>B3</td><td>W5 · W1 · W3</td></tr><tr><td>B4</td><td>W3 · W5 · W6</td></tr><tr><td>B5</td><td>W6 · W2 · W1</td></tr></table>");
+  await say("Done: 5 blocks × 3 copies = 15 block files on 6 workers, and every block lives on <b>both</b> racks. The NameNode never touched a single byte of the file; it only handed out addresses and keeps this map in memory.");
+}},
+{id:"read", ch:"3 · HDFS", title:"Reading the file", world:"onprem", async run(){
+  base();
+  F("hdfscli","nn1"); await say("Now read it back: <b>hdfs dfs -cat calls_2026.csv</b>. First a tiny metadata question to the NameNode.");
+  await P("hdfscli","nn1",{label:"where are B1–B5?"}); await P("nn1","hdfscli",{label:"block locations"});
+  F("hdfscli","dn_w1","dn_w2","dn_w5","dn_w3","dn_w6");
+  for(const [w,b] of [["w1","B1"],["w2","B2"],["w5","B3"],["w3","B4"],["w6","B5"]]){ const k=findBlock(w,b); glow(k); await P(k,"hdfscli",{c:"data",big:true,label:b,v:900}); glow(k,false); }
+  await say("Then the bytes come straight from the DataNodes, block after block. The NameNode is never in the data path, which is why one NameNode can serve thousands of machines.");
+  F(); await say("A task running <b>inside</b> the cluster would read the copy on its own machine, or at least in its own rack. Remember that: it's called <b>data locality</b>.");
+}},
+{id:"fail", ch:"3 · HDFS", title:"A worker dies", world:"onprem", async run(){
+  base(); F("w3");
+  await say("Worker 3 suddenly loses power. It held copies of B3 and B4.");
+  setDead("w3",true);
+  const cl=card("clock","<h4>Since Worker 3's last heartbeat</h4><div class='big' id='clk'>0 s</div><div id='clkS'>normal</div>");
+  const run=(a,b,d,s)=>tween(d,p=>{ document.getElementById("clk").textContent=Math.round(a+(b-a)*p)+" s"; }).then(()=>{ document.getElementById("clkS").textContent=s; });
+  await run(0,3,1.2,"one heartbeat missed: just wait, it may be a blip");
+  await say("Heartbeats from Worker 3 stop. The NameNode doesn't panic: one missed heartbeat might be a network blip or a reboot.");
+  await run(3,30,1.6,"STALE: may be avoided (if enabled)");
+  await say("After 30 seconds Worker 3 is marked <b>stale</b>. If the cluster turns on 'avoid stale DataNodes' (off by default in Apache Hadoop, often on in vendor distributions), new reads and writes skip it. Nothing is copied yet.");
+  await run(30,630,2.8,"DEAD: re-replicate its blocks");
+  await say("After 630 seconds (2 × 5 min + 10 × 3 s, about 10.5 minutes) it is declared <b>dead</b>. Waiting avoids copying terabytes just because a machine rebooted.");
+  F("nn1"); card("plan","<h4>NameNode's plan</h4><table><tr><td>B3</td><td>left on W5, W1 → copy to <b>W2</b></td></tr><tr><td>B4</td><td>left on W5, W6 (both rack 2) → copy to <b>W2</b> on rack 1</td></tr></table>");
+  await say("The NameNode checks its block map: B3 and B4 each lost a copy. B4's survivors are both on rack 2, so the new copy must go to rack 1 to keep the 'two racks' rule.");
+  F("nn1","dn_w1","dn_w5","dn_w2");
+  await all(P("dn_w1","nn1",{c:"data",label:"heartbeat"}),P("dn_w5","nn1",{c:"data"})); await all(P("nn1","dn_w1",{label:"reply: copy B3 to W2"}),P("nn1","dn_w5",{label:"reply: copy B4 to W2"}));
+  await all(P("dn_w1","dn_w2",{c:"data",big:true,label:"B3"}).then(()=>addBlock("w2","B3","new")), P("dn_w5","dn_w2",{c:"data",big:true,label:"B4"}).then(()=>addBlock("w2","B4","new")));
+  await say("The NameNode never calls a DataNode: it puts the instruction in its <b>reply to that DataNode's next heartbeat</b>. The DataNodes then copy the blocks <b>directly to each other</b> (the new copies are outlined). Every block has 3 live copies again, on 2 racks. Nobody using the cluster noticed anything.");
+}},
+{id:"mr", ch:"4 · MapReduce + YARN", title:"Running a MapReduce job", world:"onprem", async run(){
+  base(); card("job","<h4>The job</h4><b>Total call minutes per city</b><br>input: calls_2026.csv (5 blocks)");
+  F("clients","nn1"); await say("Job: total call minutes per city. You log in to the edge node and run <b>yarn jar …</b>.");
+  await P("clients","nn1",{c:"ctrl",label:"where are the blocks?"}); await P("nn1","clients",{c:"ctrl",label:"B1: W1,W4,W5 …"});
+  await say("The client asks the NameNode where the file's blocks are, works out the <b>input splits</b> (one per block, with their locations) and saves that list with the job's files in HDFS.");
+  F("clients","rm1"); await P("clients","rm1",{c:"yarn",label:"submit job"});
+  await say("Then it submits the job to the ResourceManager on Master 3.");
+  await P("rm1","nm_w4",{c:"yarn",label:"start an ApplicationMaster"}); const am=addCont("w4","AM","am"); F(am,"rm1","nm_w4");
+  await say("The ResourceManager picks a worker with free capacity (Worker 4) and its NodeManager starts this job's own coordinator, the <b>ApplicationMaster</b>, in a container.");
+  await P("dn_w4",am,{c:"data",label:"split list"});
+  await P(am,"rm1",{c:"yarn",label:"5 maps + 2 reduces, near these blocks"});
+  await say("The ApplicationMaster reads the split list the client prepared and asks the Scheduler for 5 map containers, each near its block, plus 2 reduce containers.");
+  await P("rm1",am,{c:"yarn",label:"granted"});
+  const mapsAt=[["w1","B1"],["w2","B2"],["w5","B3"],["w3","B4"],["w6","B5"]]; const maps=[];
+  await all(...mapsAt.map(([w])=>P(am,"nm_"+w,{c:"yarn"})));
+  for(const [w,b] of mapsAt) maps.push(addCont(w,"Map · "+b,"map"));
+  F(maps,mapsAt.map(([w,b])=>findBlock(w,b)));
+  await all(...mapsAt.map(([w,b],i)=>{ const k=findBlock(w,b); glow(k); return P(k,maps[i],{c:"data",label:"local read",v:300}).then(()=>glow(k,false)); }));
+  await say("<b>Data locality:</b> every map task runs on a machine that already stores its block, so it reads from its own disk. Look: nothing crossed a switch.");
+  await say("Each mapper turns lines like 'Colombo,12' into pairs (Colombo, 12), and keeps its output on local disk, sorted by key.");
+  const r1=addCont("w2","Reduce 1","red"), r2=addCont("w5","Reduce 2","red"); F(maps,r1,r2,"core","tor_r_1","tor_r_2");
+  await say("Now the <b>shuffle</b>: each reducer fetches its keys from <b>every</b> map task. hash(city) mod 2 decides which reducer owns which city.");
+  await all(...maps.flatMap(m=>[P(m,r1,{c:"mr",v:800}),P(m,r2,{c:"mr",v:800})]));
+  await say("This is the one phase where lots of data crosses the network, through the rack and core switches. That's why combiners, which shrink map output first, are worth using.");
+  F(r1,r2,"dn_w2","dn_w4","dn_w6","dn_w5","dn_w1","dn_w3");
+  await all(pipe(r1,["dn_w2","dn_w4","dn_w6"],"r-0",{cls:"out",fast:true}), pipe(r2,["dn_w5","dn_w1","dn_w3"],"r-1",{cls:"out",fast:true}));
+  await say("Each reducer writes one output file, part-r-00000 and part-r-00001, to HDFS, replicated like any file: first copy on the reducer's own machine, two on the other rack.");
+  await P(am,"rm1",{c:"yarn",label:"job finished"});
+  [...maps,r1,r2,am].forEach(removeCont); F();
+  await say("The containers disappear: tasks are temporary. The daemons (DataNodes, NodeManagers, ResourceManager) stay running, waiting for the next job.");
+}},
+{id:"hive", ch:"5 · Hive", title:"A SQL query with Hive", world:"onprem", async run(){
+  base(); card("q","<h4>Your query</h4><code>SELECT city, SUM(minutes)<br>FROM calls GROUP BY city;</code>");
+  F("beeline","hs2"); await say("Same question, in SQL this time. In Beeline on your laptop you type the query above.");
+  await P("beeline","hs2",{c:"hive",label:"SQL over JDBC"});
+  await say("It travels to <b>HiveServer2</b>, a program on the utility node in the master rack. Not on your laptop, and not on the workers.");
+  F("hs2","hms","hmsdb");
+  await P("hs2","hms",{c:"hive",label:"what is table 'calls'?"}); await P("hms","hmsdb",{c:"hive",label:"read definitions"}); await P("hmsdb","hms",{c:"hive"});
+  await P("hms","hs2",{c:"hive",label:"city, minutes · /warehouse/calls/"});
+  await say("HiveServer2 asks the <b>Metastore service</b> what 'calls' looks like. The answer comes from a small MySQL database: columns, types and the HDFS folder holding the files. No data, only the description.");
+  card("plan","<h4>Compiled plan (a Tez DAG)</h4><div class='dag'><span>read + partial sums</span>→<span>sum per city</span>→<span>result</span></div>");
+  await say("Its compiler checks the query and its optimizer turns it into a plan: a DAG of steps for the <b>Tez</b> engine.");
+  F("hs2","rm1"); await P("hs2","rm1",{c:"yarn",label:"run this Tez job"});
+  await P("rm1","nm_w6",{c:"yarn",label:"start Tez AM"}); const tam=addCont("w6","Tez AM","am");
+  await P(tam,"rm1",{c:"yarn",label:"containers near the blocks"});
+  const at=[["w1","B1"],["w2","B2"],["w5","B3"],["w3","B4"],["w6","B5"]]; const ts=at.map(([w,b])=>addCont(w,"Tez · "+b,"tez"));
+  F(tam,ts); await all(...at.map(([w,b],i)=>P(findBlock(w,b),ts[i],{c:"data",label:"local read",v:300})));
+  await say("From here it's the same mechanics as MapReduce: an ApplicationMaster in a container, tasks in containers next to their blocks, local reads…");
+  const tr=addCont("w4","Tez · sum","tez"); await all(...ts.map(t=>P(t,tr,{c:"mr",v:800})));
+  await say("…and a shuffle to the task that adds up each city.");
+  F(tr,"dn_w4","hs2","beeline"); await P(tr,"dn_w4",{c:"hive",label:"small result file"}); await P("dn_w4","hs2",{c:"hive",label:"3 rows"}); await P("hs2","beeline",{c:"hive",label:"Colombo · Galle · Kandy totals"});
+  [...ts,tr,tam].forEach(removeCont);
+  await say("The last task writes the small answer to HDFS; HiveServer2 fetches it and sends it to your laptop. HiveServer2 is the front desk: it understood the question and organised the work, but never processed the 515 MB itself.");
+}},
+{id:"hbase", ch:"6 · HBase", title:"Reading and writing one row", world:"onprem", async run(){
+  base(); card("reg","<h4>Who serves what</h4><table><tr><td>hbase:meta</td><td>Worker 4</td></tr><tr><td>Region A (S0000–S4999)</td><td>Worker 1</td></tr><tr><td>Region B (S5000–S9999)</td><td>Worker 6</td></tr></table>");
+  F("hbclient","zk1"); await say("An app server wants to save a new row for student <b>S1001</b>. Step 1: its HBase client asks ZooKeeper where the <b>hbase:meta</b> table lives.");
+  await P("hbclient","zk1",{c:"zk",label:"where is hbase:meta?"}); await P("zk1","hbclient",{c:"zk",label:"RegionServer on Worker 4"});
+  F("hbclient","rs_w4"); await P("hbclient","rs_w4",{c:"hbase",label:"who owns row S1001?"}); await P("rs_w4","hbclient",{c:"hbase",label:"Region A · Worker 1"});
+  await say("Step 2: it reads hbase:meta on Worker 4 and learns that S1001 belongs to Region A on Worker 1's RegionServer. It caches this, so next time it skips straight to step 3.");
+  F("hbclient","rs_w1"); await P("hbclient","rs_w1",{c:"hbase",big:true,label:"Put S1001"});
+  await say("Step 3: the write goes straight to Worker 1. The HMaster on Master 3 is not involved at all.");
+  F("rs_w1","dn_w1","dn_w5","dn_w6"); await pipe("rs_w1",["dn_w1","dn_w5","dn_w6"],"WAL",{cls:"wal",fast:true,c:"hbase"});
+  const mc=card("mem","<h4>Worker 1 · MemStore (memory)</h4><div class='meter'><b id='memb' style='background:#F26B5B'></b></div>");
+  await tween(0.6,p=>document.getElementById("memb").style.width=(10*p)+"%");
+  await P("rs_w1","hbclient",{c:"hbase",label:"done"});
+  await say("Step 4: the RegionServer first appends the change to its <b>write-ahead log</b> (an HDFS file, so 3 copies that survive a crash), then puts the row in the <b>MemStore</b> in memory, and replies 'done'.");
+  await tween(1.6,p=>document.getElementById("memb").style.width=(10+90*p)+"%");
+  await pipe("rs_w1",["dn_w1","dn_w4","dn_w6"],"HFile",{cls:"hfile",fast:true,c:"hbase"}); document.getElementById("memb").style.width="0%";
+  await say("Later, when the MemStore fills up, it is flushed to an <b>HFile</b>: again an HDFS file, first copy on Worker 1's own disk.");
+  F("hmaster","rs_w1","rs_w4","rs_w6"); await say("That's why HBase lookups take milliseconds: sorted row keys tell the client exactly which server to ask, and recent data is served from memory. The HMaster only decides which RegionServer owns which region.");
+}},
+{id:"kafka", ch:"7 · Kafka + Spark", title:"A live stream of events", world:"onprem", async run(){
+  base(); F("producer","kb1","kb2","kb3");
+  await say("App servers publish every call event to the Kafka topic <b>calls</b>. It has 3 partitions; each has a <b>leader</b> on one broker and a <b>follower</b> copy on another.");
+  for(let r=0;r<2;r++) await all(P("producer","kb1",{c:"kafka",label:r?"":"→ P0"}),P("producer","kb2",{c:"kafka",label:r?"":"→ P1"}),P("producer","kb3",{c:"kafka",label:r?"":"→ P2"}));
+  await all(P("kb1","kb2",{c:"kafka",label:"follower copies P0"}),P("kb2","kb3",{c:"kafka"}),P("kb3","kb1",{c:"kafka"}));
+  await say("The producer hashes each event's key (the caller ID) to pick a partition, so one caller's events always stay in order. Followers copy from leaders, so a broker can die without losing events.");
+  F("sparksubmit","rm1"); await P("sparksubmit","rm1",{c:"spark",label:"start streaming app"});
+  const drv=addCont("w5","Spark driver","sdrv"); const ex=[addCont("w1","executor","sexec"),addCont("w4","executor","sexec"),addCont("w6","executor","sexec")];
+  F(drv,ex,"kb1","kb2","kb3");
+  await say("To process the stream, someone runs <b>spark-submit</b> on the edge node. YARN starts the Spark driver inside the application's AM container on Worker 5, and three <b>executors</b> in containers on other workers.");
+  for(let r=0;r<3;r++) await all(P("kb1",ex[0],{c:"kafka",label:r?"":"P0"}),P("kb2",ex[1],{c:"kafka",label:r?"":"P1"}),P("kb3",ex[2],{c:"kafka",label:r?"":"P2"}));
+  await say("The Spark <b>driver</b> keeps track of offsets: each micro-batch it gives every executor a range of offsets in one partition, and records its progress in its own checkpoint. (Ordinary Kafka consumers would instead share the partitions as a <b>consumer group</b> and commit offsets to Kafka.) Kafka keeps events for 7 days by default, so a consumer can rewind and replay.");
+  await all(...ex.map((e,i)=>P(e,"dn_"+["w1","w4","w6"][i],{c:"spark",label:i?"":"write results"}).then(()=>addBlock(["w1","w4","w6"][i],"agg","sp"))));
+  await say("Each micro-batch's results land in HDFS. Notice where everything runs: Kafka on its own machines, Spark only inside YARN containers on the workers.");
+  [drv,...ex].forEach(removeCont);
+}},
+{id:"ingest", ch:"8 · Ingestion", title:"Bringing data in: Sqoop and Flume", world:"onprem", async run(){
+  base(); card("sq","<h4>sqoop import</h4>--table orders --split-by id -m 4");
+  F("sqoopcli","ordersdb"); await P("sqoopcli","ordersdb",{c:"ingest",label:"SELECT MIN(id), MAX(id)"}); await P("ordersdb","sqoopcli",{c:"ingest",label:"1 … 100,000"});
+  await say("<b>Sqoop</b> (on the edge node) first asks MySQL for the range of the split column: ids 1 to 100,000. With 4 mappers (the default) that's 4 slices of 25,000 ids.");
+  await P("sqoopcli","rm1",{c:"yarn",label:"map-only job"});
+  const am=addCont("w3","AM","am"); const ws=["w1","w2","w4","w6"]; const ms=ws.map((w,i)=>addCont(w,"Sqoop map "+(i+1),"sqmap"));
+  F(ms,am,"ordersdb"); await say("It submits a <b>map-only</b> job: YARN starts an ApplicationMaster and four map containers. No reducers.");
+  const rng=["1–25k","25k–50k","50k–75k","75k–100k"];
+  await all(...ms.map((m,i)=>P("ordersdb",m,{c:"ingest",big:true,label:rng[i]})));
+  await say("Each map task opens its own database connection and pulls its slice: four reads at once.");
+  await all(...ms.map((m,i)=>P(m,"dn_"+ws[i],{c:"ingest"}).then(()=>addBlock(ws[i],"m-"+i,"sq"))));
+  await say("Each writes its rows to HDFS as part-m-0000N (HDFS then replicates them as usual).");
+  [...ms,am].forEach(removeCont); uncard("sq");
+  F("webapp","flume"); card("fl","<h4>Flume agent · channel buffer</h4><div class='meter'><b id='flb'></b></div><div id='flt'>0 events</div>");
+  let n=0;
+  for(let r=0;r<6;r++){ Pq("webapp","flume",{c:"ingest",faint:false,v:1000}); await sleep(0.18); Pq("webapp","flume",{c:"ingest",v:1000}); await sleep(0.18); n+=2; document.getElementById("flb").style.width=(n*8.3)+"%"; document.getElementById("flt").textContent=n+" … events"; }
+  await say("Meanwhile the web servers send a constant drizzle of tiny log events (about 1 KB each) to the <b>Flume</b> agent. Its Source receives them and its Channel buffers them.");
+  F("flume","dn_w2","dn_w5","dn_w4"); await pipe("flume",["dn_w2","dn_w5","dn_w4"],"log",{cls:"log",fast:true,c:"ingest"});
+  document.getElementById("flb").style.width="0%"; document.getElementById("flt").textContent="buffer flushed";
+  await say("The HDFS Sink appends batches to an open file and only <b>rolls</b> to a new file by time, size or event count. Tuned to roll at about 128 MB, a million 1 KB events become about 8 large files instead of a million tiny ones that would swamp the NameNode's memory. (The defaults roll every 30 s or 1 KB, so they must be tuned.)");
+}},
+{id:"oozie", ch:"9 · Orchestration", title:"01:00: the nightly workflow", world:"onprem", async run(){
+  base();
+  const dag=()=>"<h4>Oozie workflow · 01:00</h4><div class='dag'><span id='d1'>sqoop-import</span>→<span id='d2'>hive-transform</span>→<span id='d3'>export</span></div>";
+  card("dag",dag()); const st=(i,c)=>document.getElementById("d"+i).className=c;
+  F("oozie"); await say("At 01:00 the <b>Oozie</b> coordinator on the utility node checks that today's input folder exists, then starts the nightly workflow.");
+  st(1,"run"); F("oozie","rm1"); await P("oozie","rm1",{c:"ingest",label:"launch sqoop-import"});
+  let cs=["w1","w2","w4","w6"].map(w=>addCont(w,"Sqoop map","sqmap")); await sleep(1.5); cs.forEach(removeCont); st(1,"ok");
+  st(2,"run"); F("oozie","hs2","rm1"); await P("oozie","hs2",{c:"ingest",label:"run hive-transform.sql"}); await P("hs2","rm1",{c:"yarn",label:"Tez job"});
+  cs=["w1","w3","w5"].map(w=>addCont(w,"Tez task","tez")); await sleep(1.5); cs.forEach(removeCont); st(2,"ok");
+  st(3,"run"); await P("oozie","rm1",{c:"ingest",label:"launch export"}); cs=[addCont("w4","export","sqmap")]; await sleep(1); cs.forEach(removeCont); st(3,"ok");
+  F("oozie"); await say("Every action ran as its own YARN job on the workers. Oozie itself processed nothing: it waited, launched, and recorded each result. (Oozie is retired now; Airflow or Azure Data Factory play this role today.)");
+}},
+{id:"failover", ch:"10 · High availability", title:"When a master dies", world:"onprem", async run(){
+  base(); F("m1"); await say("Now <b>Master 1</b>, the machine running the active NameNode, crashes.");
+  setDead("m1",true); activeNN="nn2";
+  F("zk2","zk3","zkfc2"); await say("Its ZooKeeper session stops being renewed. When the session times out, ZooKeeper deletes the 'active' lock. ZooKeeper itself is fine: Masters 2 and 3 are still a majority.");
+  await P("zk3","zkfc2",{c:"zk",label:"lock released"}); await P("zkfc2","zk3",{c:"zk",label:"take the lock"});
+  F("zkfc2","nn2","jn2","jn3"); await P("zkfc2","nn2",{c:"ctrl",label:"become active"}); await all(P("nn2","jn2",{c:"ctrl",label:"new epoch"}),P("nn2","jn3",{c:"ctrl"}));
+  await all(P("jn2","nn2",{c:"data",label:"latest edits"}),P("jn3","nn2",{c:"data"}));
+  setLabel("nn2","NameNode · active"); setLabel("nn1","NameNode · down"); glow("nn2");
+  await say("Master 2's ZKFC grabs the lock and promotes its own NameNode. The new NameNode claims a higher 'epoch' on the JournalNodes, which from then on accept edits only from it. That is the <b>fencing</b>: even if the old NameNode woke up, it could never write again. The new one is already up to date: it has been reading every change from the JournalNodes, and 2 of 3 are still alive.");
+  glow("nn2",false); F(DNS,"nn2");
+  await say("The DataNodes were reporting to <b>both</b> NameNodes all along, so the new active one already knows where every block is. Clients retry and carry on: a short pause, no data lost.");
+}},
+{id:"cloud1", ch:"11 · Azure HDInsight", title:"The same ideas in the cloud", world:"cloud", async run(){
+  cbase(); F("c_adls"); await say("Now Azure HDInsight. The biggest change: the data no longer lives on worker disks. It lives in an <b>Azure Storage account</b>, a service that exists on its own. For clusters you create yourself that is usually <b>ADLS Gen2</b> (abfss:// paths), which plays the role of HDFS.");
+  F(CMACH.filter(m=>m.cluster).map(m=>m.id)); await say("The cluster (gateways, two head nodes, three ZooKeeper nodes and the workers) is a set of virtual machines Azure creates for you. You can delete it at any time.");
+  F("c_h0","c_h1"); await say("Same programs, new homes: <b>HiveServer2</b> runs on both head nodes, the <b>ResourceManager</b> is active on one and standby on the other, NodeManagers run on the workers, and ZooKeeper on its own small nodes.");
+  F("c_sql"); await say("Table definitions live in an <b>external Hive metastore</b> in Azure SQL Database, outside the cluster, so they survive too.");
+  F("c_gw1","c_gw2","c_laptop"); await say("Web, REST and JDBC traffic (Ambari, Beeline, Power BI) comes in through the HTTPS <b>gateways</b> at clustername.azurehdinsight.net. SSH is the exception: it goes straight to a head node or the edge node.");
+  F(); await say("Next: the cost-saving pattern, where the cluster exists only while there is work to do.");
+}},
+{id:"cloud2", ch:"11 · Azure HDInsight", title:"01:00: Data Factory creates the cluster", world:"cloud", async run(){
+  cbase(); clusterVisible(false); F("c_adf","c_bill","c_adls");
+  card("clk","<h4>Clock</h4><div class='big' id='cclk'>00:59</div>");
+  await say("Night time. There is no cluster at all, so the compute meter is stopped. Only the storage account (and its files) exists.");
+  document.getElementById("cclk").textContent="01:00"; F("c_adf","c_bill");
+  await say("01:00: a schedule trigger in <b>Azure Data Factory</b> starts the nightly pipeline, which asks Azure to create an <b>on-demand</b> HDInsight cluster.");
+  F("c_adls"); await say("One catch: an on-demand cluster that ADF creates must use <b>Blob storage</b> (wasbs:// paths), not ADLS Gen2. So tonight's files sit in a Blob container in the storage account. It is the same idea: permanent storage outside the cluster.");
+  CSTORE.billS.textContent="cluster exists — billed per minute, even when idle";
+  await all(clusterFade(true,4), tween(4,p=>{ setBill(20*p); document.getElementById("cclk").textContent="01:"+String(Math.round(20*p)).padStart(2,"0"); }));
+  F(); await say("Provisioning takes about 20 minutes. From the moment the cluster exists, compute is billed <b>per minute</b>.");
+}},
+{id:"cloud3", ch:"11 · Azure HDInsight", title:"The job runs against cloud storage", world:"cloud", async run(){
+  cbase(); setBill(20); CSTORE.billS.textContent="cluster exists — billed per minute, even when idle";
+  const bill=(async()=>{ try{ for(;;){ await sleep(0.5); if(!nextResolver) setBill(CSTORE.billMin+3); } }catch(e){} })();
+  F("c_pipe","c_gw1","c_hs2"); await P("c_pipe","c_gw1",{c:"azure",label:"Hive activity"}); await P("c_gw1","c_hs2",{c:"hive",label:"SQL"});
+  await P("c_hs2","c_sqlp",{c:"hive",label:"what is table 'calls'?"}); await P("c_sqlp","c_hs2",{c:"hive",label:"wasbs://…/raw/calls/"});
+  await say("ADF's Hive activity comes in through the gateway to <b>HiveServer2</b> on the active head node, which asks the external metastore what the table looks like and where its files are.");
+  await P("c_hs2","c_rm",{c:"yarn",label:"Tez job"}); const am=addCont("c_w1","Tez AM","am"); const ts=["c_w2","c_w3","c_w4","c_w1"].map(w=>addCont(w,"Tez task","tez"));
+  F(ts,am,"c_adls"); const raw=DYN.find(i=>i.startsWith("cf_raw"));
+  await all(...ts.map((t,i)=>P(raw,t,{c:"data",big:true,label:i?"":"read over the network"})));
+  await say("Workers read the raw files from the storage account <b>over Azure's network</b> using wasbs:// paths (abfss:// on an ADLS Gen2 cluster), through the same Hadoop FileSystem API, so Hive doesn't care that it isn't HDFS. There's no data locality any more; fast networks make that acceptable.");
+  await all(P(ts[0],ts[3],{c:"mr"}),P(ts[1],ts[3],{c:"mr"}),P(ts[2],ts[3],{c:"mr"}));
+  await P(ts[3],"c_adls",{c:"mr",big:true,label:"write curated"}); addFile("cur","part-0","out"); addFile("cur","part-1","out");
+  await say("Results are written straight back to the storage account, into the curated folder.");
+  await P(ts[3],"c_hs2",{c:"hive",label:"done"}); await P("c_hs2","c_pipe",{c:"azure",label:"succeeded"}); [...ts,am].forEach(removeCont);
+}},
+{id:"cloud4", ch:"11 · Azure HDInsight", title:"Delete the cluster", world:"cloud", async run(){
+  cbase({curated:true}); setBill(125); CSTORE.billS.textContent="cluster exists — billed per minute, even when idle";
+  card("ttl","<h4>Idle timeToLive</h4><div class='big' id='ttl'>15 min</div>");
+  F("c_adf","c_bill"); await say("The job is done, but the cluster waits for its <b>timeToLive</b> (say 15 minutes) in case another activity needs it, and the meter keeps running even though it's idle.");
+  await tween(3,p=>{ document.getElementById("ttl").textContent=Math.round(15*(1-p))+" min"; setBill(125+15*p); });
+  await say("Then Data Factory deletes the cluster: every VM disappears and billing stops.");
+  await clusterFade(false,3); CSTORE.billS.textContent="cluster deleted — meter stopped";
+  F("c_adls","c_sql"); card("sum","<h4>Compute billed</h4>≈ 2 h 20 min a day ≈ <b>70 h a month</b><br>instead of 720 h for a cluster that runs 24/7");
+  await say("What survives: every file in the storage account and every table definition in the external metastore. Tomorrow at 01:00 a brand-new cluster finds everything exactly where it was.");
+}},
+{id:"summary", ch:"12 · Summary", title:"Who runs where", world:"onprem", async run(){
+  base();
+  for(const s of ["hdfs","yarn","mr","hive","hbase","kafka","zk","spark","ingest"]){
+    let tmp=[];
+    if(s==="mr") tmp=[addCont("w1","Map task","map"),addCont("w5","Reduce task","red"),addCont("w3","Tez task","tez")];
+    if(s==="spark") tmp=[addCont("w5","Spark driver","sdrv"),addCont("w2","executor","sexec")];
+    if(s==="ingest") tmp=[addCont("w4","Sqoop map","sqmap")];
+    filterSys(s,true); await say("<b>"+SYS[s].name+":</b> "+SYSINFO[s]);
+    tmp.forEach(removeCont);
+  }
+  filterSys(null,true); F();
+  await say("That's the whole picture: a few always-on programs on masters and workers, temporary tasks in containers, blocks on worker disks, and in the cloud the data moves out into a storage service. Click anything to explore it in depth.");
+}}
+];
+const SCENE_IDX = Object.fromEntries(SCENES.map((s,i)=>[s.id,i]));
+
+/* =====================================================================
+   8. PLAYER, PANEL, EXPLORE MODE
+   ===================================================================== */
+let cur=0;
+const playBtn=document.getElementById("playBtn");
+function setPaused(v){ paused=v; playBtn.textContent=v?"▶":"⏸"; }
+async function playScene(i){
+  i=Math.max(0,Math.min(SCENES.length-1,i));
+  token++; const my=token; cur=i; mode="watch"; setModeUI(); transcript=[]; infoKey=null;
+  filterOn=null; document.querySelectorAll(".chipf").forEach(c=>c.classList.remove("on")); capEl.innerHTML="";
+  const s=SCENES[i]; resetWorld(s.world); renderTimeline(); renderTag(); renderPanel(); setPaused(false);
+  try{ await s.run(); if(my===token){ await sleep(1.5); if(my===token && cur<SCENES.length-1) playScene(cur+1); else if(my===token){ capEl.innerHTML="The end. Pick any scene on the timeline, or switch to <b>Explore freely</b>."; } } }
+  catch(e){ if(e!==ABORT) console.error(e); }
+}
+function renderTag(){ const s=SCENES[cur]; document.getElementById("chTxt").textContent=mode==="watch"?("Chapter "+s.ch+"  ·  scene "+(cur+1)+" of "+SCENES.length):"Explore mode"; document.getElementById("ttTxt").textContent=mode==="watch"?s.title:(curWorld==="cloud"?"Azure HDInsight":"On-premises cluster")+": click anything"; }
+function renderTimeline(){
+  const tl=document.getElementById("timeline"); tl.innerHTML="";
+  SCENES.forEach((s,i)=>{ const d=document.createElement("div"); d.className="ts"+(i<cur?" done":"")+(i===cur&&mode==="watch"?" cur":"")+(s.world==="cloud"?" cloud":""); d.dataset.t=(i+1)+". "+s.title; d.title=(i+1)+". "+s.title; d.onclick=()=>playScene(i); tl.appendChild(d); });
+}
+let infoKey=null, infoInst=null, filterOn=null;
+const panel=document.getElementById("panel");
+function kindLabel(k){ return {machine:"Machine (hardware / VM)",daemon:"Program · always running",task:"Program · temporary, inside a YARN container",data:"Data",net:"Network",svc:"Managed cloud service"}[k]||k; }
+function renderPanel(){
+  if(infoKey){ renderInfo(); return; }
+  if(filterOn){ panel.innerHTML=`<button class="btn close" onclick="filterSys(null)">✕</button><span class="kind" style="background:${SYS[filterOn].c}33;color:${SYS[filterOn].c}">System</span><h2>${SYS[filterOn].name}</h2><p>${SYSINFO[filterOn]}</p><p style="color:#9AA8C2">Highlighted on the map. Click any highlighted program for its deep dive.</p>`; return; }
+  if(mode==="explore"){
+    panel.innerHTML=`<span class="kind">Explore mode</span><h2>Click anything on the map</h2><p>Every machine, program, container, block and switch has a deep dive: what it is, which machine it runs on, who it talks to, what happens if it fails.</p><p>Use the coloured buttons below the map to light up <b>where each system runs</b>. Switch between the on-premises cluster and Azure HDInsight at the top.</p><p style="color:#9AA8C2">Heartbeats are ticking in the background: amber dots go to the active NameNode, blue to the ResourceManager.</p>`+sceneList(); return;
+  }
+  const s=SCENES[cur];
+  panel.innerHTML=`<span class="kind">Now playing · ${cur+1} of ${SCENES.length}</span><h2>${s.title}</h2><p style="color:#9AA8C2">Click any machine or program to pause and read about it.</p>`+
+    `<div class="transcript">${transcript.map((t,i)=>`<div class="${i===transcript.length-1?"now":""}">${t}</div>`).join("")}</div>`+sceneList();
+}
+function sceneList(){ return `<h4 style="margin:16px 0 4px;font-size:12px;letter-spacing:1.2px;color:#9AA8C2;text-transform:uppercase">All scenes</h4><ul class="scenelist">`+SCENES.map((s,i)=>`<li class="${i===cur&&mode==="watch"?"cur":""}" onclick="playScene(${i})"><b>${i+1}</b><span>${s.title}${s.world==="cloud"?" ☁":""}</span></li>`).join("")+"</ul>"; }
+function renderInfo(){
+  const I=INFO[infoKey]; if(!I){ infoKey=null; renderPanel(); return; }
+  const n=infoInst?NODES[infoInst]:null; const host=n&&n.machine&&n.kind!=="machine"?(M(n.machine)||{}).title||NODES[n.machine]&&n.machine:null;
+  const scol=SYS[I.sys]?SYS[I.sys].c:"#9AA8C2";
+  panel.innerHTML=`<button class="btn close" id="closeInfo">✕ ${mode==="watch"?"Back to the story":"Close"}</button>
+   <span class="kind ${I.kind}">${kindLabel(I.kind)}</span>
+   <h2>${I.title}</h2>
+   <div style="font-size:12px;color:${scol};font-weight:700">● ${SYS[I.sys]?SYS[I.sys].name:""}</div>
+   ${host?`<p style="background:#1D2C4B;border-radius:8px;padding:8px 10px"><b>This one</b> (“${n.label||""}”) is running on <b>${host}</b>.</p>`:""}
+   <p>${I.what}</p>
+   <dl><dt>Runs on</dt><dd>${I.runs}</dd>
+   <dt>Talks to</dt><dd><ul>${I.talks.map(t=>`<li>${t}</li>`).join("")}</ul></dd>
+   ${I.nums?`<dt>Numbers worth knowing</dt><dd><ul>${I.nums.map(t=>`<li>${t}</li>`).join("")}</ul></dd>`:""}
+   <dt>If it fails</dt><dd>${I.fails}</dd></dl>
+   <div class="analogy">💡 ${I.analogy}</div>
+   ${I.scenes&&I.scenes.length?`<dt style="color:#9AA8C2;font-size:11px;letter-spacing:1.2px;text-transform:uppercase">See it in action</dt><div class="goto">${I.scenes.filter(s=>SCENE_IDX[s]!==undefined).map(s=>`<button onclick="playScene(${SCENE_IDX[s]})">▶ ${SCENES[SCENE_IDX[s]].title}</button>`).join("")}</div>`:""}`;
+  document.getElementById("closeInfo").onclick=()=>{ infoKey=null; infoInst=null; if(mode==="watch") setPaused(false); renderPanel(); };
+}
+function showInfo(id){ const n=NODES[id]; if(!n||!n.info) return; infoKey=n.info; infoInst=id; if(mode==="watch") setPaused(true); renderPanel(); }
+svg.addEventListener("click",e=>{ const t=e.target.closest("[data-id]"); if(t) showInfo(t.getAttribute("data-id")); });
+function filterSys(s,silent){
+  filterOn=s; document.querySelectorAll(".chipf").forEach(c=>c.classList.toggle("on",c.dataset.s===s));
+  if(!s){ F(); if(!silent) renderPanel(); return; }
+  const ids=Object.keys(NODES).filter(k=>NODES[k].sys===s && NODES[k].world===curWorld && NODES[k].kind!=="machine");
+  F(ids.length?ids:["__none__"]);
+  if(!silent){ infoKey=null; if(mode==="watch") setPaused(true); renderPanel(); }
+}
+// filter chips
+const fl=document.getElementById("filters");
+for(const s of ["hdfs","yarn","mr","hive","hbase","kafka","zk","spark","ingest","client","azure"]){ const b=document.createElement("button"); b.className="chipf"; b.dataset.s=s; b.innerHTML=`<i style="background:${SYS[s].c}"></i>${SYS[s].name}`; b.onclick=()=>filterSys(filterOn===s?null:s); fl.appendChild(b); }
+// legend
+document.getElementById("legend").innerHTML=`<b>How to read the map</b>
+ <div class="row"><svg width="46" height="28"><rect x="2" y="2" width="42" height="24" rx="5" fill="#1A2540" stroke="#3A4D75" stroke-width="1.6"/></svg><span><b>Machine</b>: a server or VM with CPU, memory, disks</span></div>
+ <div class="row"><svg width="46" height="28"><rect x="2" y="6" width="42" height="16" rx="5" fill="#F2A93B29" stroke="#F2A93B"/><circle cx="10" cy="14" r="3" fill="#F2A93B"/></svg><span><b>Program</b> (daemon): always running on that machine</span></div>
+ <div class="row"><svg width="46" height="28"><rect x="2" y="4" width="42" height="20" rx="5" fill="#7BD38938" stroke="#7BD389" stroke-dasharray="5 3" stroke-width="1.6"/></svg><span><b>Container</b>: temporary slice of a worker where one task runs</span></div>
+ <div class="row"><svg width="46" height="28"><rect x="10" y="4" width="26" height="20" rx="4" fill="#F2A93B"/></svg><span><b>Block</b>: a piece of a file on a worker's disk</span></div>
+ <div class="row"><svg width="46" height="28"><line x1="2" y1="14" x2="44" y2="14" stroke="#2E4066" stroke-width="3"/><circle cx="26" cy="14" r="5" fill="#E8EDF6"/></svg><span><b>Network</b>: dots are messages (small) and data (big) moving through the switches</span></div>`;
+document.getElementById("panelBtn").onclick=e=>{ const h=document.getElementById("panel").classList.toggle("hide"); e.target.textContent=h?"Show panel":"Hide panel"; };
+document.getElementById("legendBtn").onclick=()=>document.getElementById("legend").classList.toggle("show");
+function setModeUI(){ document.querySelectorAll("#modeSeg button").forEach(b=>b.classList.toggle("on",b.dataset.m===mode)); renderTimeline(); renderTag(); }
+function explore(world){
+  token++; mode="explore"; infoKey=null; transcript=[]; resetWorld(world||curWorld); setPaused(false);
+  if(curWorld==="onprem"){ putCalls(); startHeartbeats(); [["w1","Map · B1","map"],["w4","AM","am"],["w2","Reduce 1","red"],["w5","executor","sexec"]].forEach(a=>addCont(...a)); }
+  else { cbase({curated:true}); addCont("c_w1","Tez AM","am"); addCont("c_w2","Tez task","tez"); setBill(45); CSTORE.billS.textContent="cluster exists — billed per minute"; }
+  capEl.innerHTML="Explore mode: click any machine, program, container, block or switch. Use the coloured buttons to light up where each system runs.";
+  setModeUI(); renderPanel();
+}
+document.querySelectorAll("#modeSeg button").forEach(b=>b.onclick=()=>{ if(b.dataset.m==="explore") explore(); else playScene(cur); });
+document.querySelectorAll("#worldSeg button").forEach(b=>b.onclick=()=>{ const w=b.dataset.w; if(mode==="explore") explore(w); else playScene(w==="cloud"?SCENE_IDX.cloud1:0); });
+playBtn.onclick=()=>{ if(mode==="explore"){ playScene(cur); return; } setPaused(!paused); };
+document.getElementById("prevBtn").onclick=()=>playScene(cur-1);
+document.getElementById("nextBtn").onclick=()=>playScene(cur+1);
+document.getElementById("speedSel").onchange=e=>speed=parseFloat(e.target.value);
+document.getElementById("stepChk").onchange=e=>{ stepMode=e.target.checked; if(!stepMode && nextResolver) nextResolver(); };
+capEl.onclick=()=>{ if(nextResolver) nextResolver(); };
+document.addEventListener("keydown",e=>{
+  if(e.target.tagName==="SELECT"||e.target.tagName==="INPUT") return;
+  if(e.code==="Space"){ e.preventDefault(); playBtn.click(); }
+  else if(e.key==="ArrowRight"){ if(nextResolver) nextResolver(); else if(e.shiftKey) playScene(cur+1); }
+  else if(e.key==="n"||e.key==="N") playScene(cur+1);
+  else if(e.key==="p"||e.key==="P") playScene(cur-1);
+  else if(e.key==="Escape"){ infoKey=null; filterSys(null); }
+});
+playScene(0);
+</script>
+</body>
+</html>
